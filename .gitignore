@@ -1,0 +1,30 @@
+# Environments and Python artifacts
+.venv/
+env/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data safety: NEVER commit raw patient data
+data/
+*.csv
+*.tsv
+*.xlsx
+*.rds
+*.RData
+
+# Experiment tracking
+mlruns/
+.mlflow/
+
+# OS and IDE files
+.DS_Store
+.vscode/
+.idea/
