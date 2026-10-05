@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from stroke_model.predict import StrokePredictor
@@ -122,6 +123,12 @@ class PredictionResponse(BaseModel):
 # ==============================================================================
 # ENDPOINTS
 # ==============================================================================
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirect the bare URL to the interactive documentation page."""
+    return RedirectResponse(url="/docs")
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 def health_check():
