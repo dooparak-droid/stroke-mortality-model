@@ -124,10 +124,30 @@ def test_clinical_monotonicity_subtype():
 
 
 def test_model_regression_snapshot():
-    """Golden regression test: verify fixed synthetic patient matches saved model baseline."""
-    predictor = StrokePredictor()
-    result = predictor.predict_record(SYNTHETIC_RECORDS[0])
+    """Golden regression test: fixed synthetic patients must match the saved v1.1.0 baseline.
 
-    # Low risk synthetic baseline (expected ~0.04)
-    assert 0.01 <= result["mortality_probability"] <= 0.10
-    assert result["high_risk_flag"] is False
+    The model is trained without class weighting, so predicted probabilities sit on the
+    scale of the observed death rate (about 4.7%). The Youden threshold is about 0.049.
+    """
+    predictor = StrokePredictor()
+
+    # Low risk synthetic patient: predicted risk about 0.005, below the threshold
+    low = predictor.predict_record(SYNTHETIC_RECORDS[0])
+    assert 0.001 <= low["mortality_probability"] <= 0.03
+    assert low["high_risk_flag"] is False
+
+    # High risk synthetic patient: predicted risk about 0.47, above the threshold
+    high = predictor.predict_record(SYNTHETIC_RECORDS[1])
+    assert 0.30 <= high["mortality_probability"] <= 0.65
+    assert high["high_risk_flag"] is True
+
+
+def test_probabilities_on_observed_risk_scale():
+    """The typical synthetic patient must not receive a risk far above the 4.7% death rate.
+
+    Guards against reintroducing class weighting, which shifts probabilities towards 50%.
+    """
+    predictor = StrokePredictor()
+    mid_record = dict(SYNTHETIC_RECORDS[0], age=72.0, sbp=150.0, delay=14.0, subtype="PACS")
+    assert predictor.predict_record(mid_record)["mortality_probability"] < 0.15
+    assert predictor.threshold < 0.15

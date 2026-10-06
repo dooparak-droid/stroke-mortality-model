@@ -1,22 +1,22 @@
 {
-  "model_version": "v1.0.0",
+  "model_version": "v1.1.0",
   "model_type": "Ridge Logistic Regression",
-  "training_date": "2026-10-02T22:33:05.718817+00:00",
-  "optimal_threshold": 0.5498,
-  "best_hyperparameter_C": 0.007847599703514606,
-  "cv_auc": 0.7652,
+  "training_date": "2026-10-06T20:22:13.757057+00:00",
+  "optimal_threshold": 0.0494,
+  "best_hyperparameter_C": 0.14384498882876628,
+  "cv_auc": 0.7657,
   "test_metrics": {
-    "auc": 0.8029,
-    "brier_score": 0.1891,
-    "threshold": 0.5498,
-    "sensitivity": 0.6536,
-    "specificity": 0.7989,
-    "precision": 0.1377,
-    "f1_score": 0.2275,
-    "true_positives": 100,
-    "true_negatives": 2487,
-    "false_positives": 626,
-    "false_negatives": 53
+    "auc": 0.8048,
+    "brier_score": 0.0412,
+    "threshold": 0.0494,
+    "sensitivity": 0.732,
+    "specificity": 0.7498,
+    "precision": 0.1257,
+    "f1_score": 0.2146,
+    "true_positives": 112,
+    "true_negatives": 2334,
+    "false_positives": 779,
+    "false_negatives": 41
   },
   "predictors": [
     "age",
@@ -42,5 +42,5 @@
     "symptom7",
     "symptom8"
   ],
-  "class_weight_death": 20.344226579520697
+  "class_weighting": "none"
 }

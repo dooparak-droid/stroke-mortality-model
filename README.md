@@ -6,6 +6,14 @@ This project ports, packages, and serves a machine learning model predicting 14-
 
 ---
 
+## Live Demo
+
+The service is deployed on Render's free tier at [stroke-mortality-model.onrender.com](https://stroke-mortality-model.onrender.com). Opening the link redirects to the interactive API documentation at `/docs`, where the `POST /predict` endpoint can be tried directly in the browser.
+
+Two limitations of the free tier apply. The service sleeps after 15 minutes without traffic, so the first request after a quiet period can take about a minute. The filesystem is also reset on every restart, so prediction logs written by the deployed service are not kept. The drift check in `monitoring/` is intended to be run on logs from a local run.
+
+---
+
 ## Clinical and Methodological Context
 
 In acute stroke care, early mortality risk assessment can assist in triage, resource planning, and identifying patients at elevated risk of deterioration. 
@@ -13,7 +21,7 @@ In acute stroke care, early mortality risk assessment can assist in triage, reso
 A primary methodological challenge in this cohort is the severe **class imbalance**, with an observed event rate of **4.7%**. Standard evaluation approaches that focus purely on accuracy or discrimination (such as the Area Under the ROC Curve) can be misleading:
 * A model can achieve an AUC of 0.80 while still predicting risks that are systematically too high or too low.
 * For rare adverse events, **calibration** (assessed via calibration curves and Brier score) is vital to ensure that a predicted probability of 10% genuinely corresponds to roughly 10 observed deaths per 100 similar patients.
-* The classification threshold must be chosen deliberately. Here, **Youden's J statistic** is optimised strictly on cross-validation folds to balance sensitivity and specificity without data leakage into the test set.
+* The classification threshold must be chosen deliberately. Here, **Youden's J statistic** is optimised strictly on cross-validation folds to balance sensitivity and specificity without data leakage into the test set. Because the event rate is low, the resulting threshold on predicted risk is also low (about 0.049), and the high-risk flag is a screening flag and not a confident prediction of death.
 
 ---
 
@@ -66,7 +74,7 @@ python -m stroke_model.train
 
 This performs:
 1. Stratified 75/25 train-test partitioning.
-2. 10-fold cross-validation with inverse-frequency class weighting.
+2. 10-fold cross-validation to tune the ridge penalty, with no class weighting.
 3. Optimal regularisation tuning for Ridge logistic regression.
 4. Out-of-fold threshold optimisation using Youden's J statistic.
 5. Export of the versioned model pipeline artifact to `models/`.
@@ -144,10 +152,10 @@ curl -X POST "http://localhost:8000/predict" \
 Example response:
 ```json
 {
-  "mortality_probability": 0.4128,
+  "mortality_probability": 0.0187,
   "high_risk_flag": false,
-  "threshold_applied": 0.5498,
-  "model_version": "v1.0.0",
+  "threshold_applied": 0.0494,
+  "model_version": "v1.1.0",
   "disclaimer": "Research demonstration only. Not for clinical use or medical decision-making."
 }
 ```
@@ -156,20 +164,24 @@ Example response:
 
 ## Results and Comparison with R Baseline
 
-Both pipelines utilise inverse-frequency class weighting (approximately 20.3x for deaths) to address the 4.7% event rate. A key methodological distinction is threshold selection: the R baseline selected Youden's threshold on the holdout test set, whereas the Python implementation optimised the threshold strictly across out-of-fold cross-validation folds before applying it to the untouched holdout test partition.
+The R baseline trained its ridge model with inverse-frequency class weighting (deaths counted about 20 times as heavily as survivors). The Python model is trained without class weighting, because the weighting raised every predicted probability towards 50% and left it unusable as a risk estimate. The low event rate is handled instead by the classification threshold. Threshold selection also differs. The R baseline selected Youden's threshold on the holdout test set, whereas the Python implementation optimised the threshold across out-of-fold cross-validation folds before applying it to the untouched holdout test partition.
 
-| Metric | R Baseline (glmnet) | Python Implementation (scikit-learn) | Notes |
+| Metric | R Baseline (glmnet, weighted) | Python Implementation (scikit-learn, unweighted) | Notes |
 |---|---|---|---|
 | Model Architecture | Ridge Logistic Regression (L2) | Ridge Logistic Regression (L2) | Standardised predictors |
-| Cross-validation AUC | 0.7813 | 0.7652 | 10-fold stratified CV |
-| Test Partition AUC | Not reported separately | 0.8029 | 25% holdout (3,266 patients) |
-| Probability Calibration (Brier Score) | Not evaluated | 0.1891 | Mean squared probability error |
-| Youden Decision Threshold | 0.50 (nominal) / 0.55 | 0.5498 | Tuned out-of-fold in Python |
-| Test Sensitivity | 69.1% | 65.4% | True positive rate |
-| Test Specificity | 75.3% | 79.9% | True negative rate |
-| Test F1-Score | 0.2016 | 0.2275 | Harmonic mean of precision/recall |
+| Cross-validation AUC | 0.7813 | 0.7657 | 10-fold stratified CV on the training partition |
+| Test Partition AUC | Not reported separately | 0.8048 | 25% holdout (3,266 patients) |
+| Brier Score | 0.188 | 0.0412 | Mean squared error of predicted risk. Lower is better. The R value was computed afterwards from the saved R predictions, not reported in the original analysis |
+| Mean Predicted Risk | 39.8% | 4.7% | Observed death rate in the holdout is 4.7% |
+| Youden Decision Threshold | 0.50 (nominal) / 0.55 | 0.0494 | Cutoff on predicted risk. Tuned out-of-fold in Python |
+| Test Sensitivity | 69.1% | 73.2% | Share of deaths flagged high risk |
+| Test Specificity | 75.3% | 75.0% | Share of survivors not flagged |
+| Test Precision | Not reported | 12.6% | Share of flagged patients who died |
+| Test F1-Score | 0.2016 | 0.2146 | Harmonic mean of precision and sensitivity |
 
-The calibration curve is stored at `reports/calibration_plot.png`. Due to inverse-frequency weighting during training, predicted probabilities represent weighted risk scores; post-hoc calibration can be applied if absolute population incidence probabilities are required.
+For reference, a model that gave every patient the same risk of 4.7% would have a Brier score of about 0.045. The R model's Brier score is far above this because of the weighting. An earlier Python run with the same class weighting as R gave a test AUC of 0.8029 and a Brier score of 0.1891, so removing the weighting did not change how well patients are ranked.
+
+At the Python threshold of 0.0494, about 27% of holdout patients are flagged high risk, and about 13% of flagged patients died. The flag is therefore a screening flag. The calibration curve is stored at `reports/calibration_plot.png`.
 
 ---
 

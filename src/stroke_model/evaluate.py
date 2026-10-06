@@ -102,11 +102,17 @@ def plot_calibration(
         y_true, y_prob, n_bins=n_bins, strategy="quantile"
     )
 
+    # Zoom to the range of the data. Predicted risks are low because the event rate is low,
+    # so a 0 to 1 axis would squeeze every point into one corner.
+    axis_max = min(1.0, float(max(prob_pred.max(), prob_true.max())) * 1.15)
+
     plt.figure(figsize=(6, 6))
-    plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfect calibration")
+    plt.plot([0, axis_max], [0, axis_max], linestyle="--", color="gray", label="Perfect calibration")
     plt.plot(prob_pred, prob_true, marker="o", color="#2b5c8f", label="Model calibration")
     plt.xlabel("Mean Predicted Probability")
     plt.ylabel("Observed Proportion")
+    plt.xlim(0, axis_max)
+    plt.ylim(0, axis_max)
     plt.title("Calibration Curve (Quantile Bins)")
     plt.legend(loc="lower right")
     plt.grid(True, linestyle=":", alpha=0.6)

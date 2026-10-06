@@ -51,12 +51,10 @@ def train_ridge_model(
     X_test = test_df[ALL_PREDICTORS]
     y_test = test_df[TARGET_COLUMN].values
 
-    # Calculate class weights for training set (inverse frequency)
-    n_survived = int(np.sum(y_train == 0))
-    n_died = int(np.sum(y_train == 1))
-    death_weight = float(n_survived / n_died)
-    class_weight = {0: 1.0, 1: death_weight}
-    print(f"  Class weights - Survived (0): 1.0, Died (1): {death_weight:.2f}")
+    # No class weighting: each patient counts equally so that predicted
+    # probabilities stay on the scale of the observed death rate. The low event
+    # rate is handled by the Youden threshold chosen in Step 5.
+    print(f"  Training deaths: {int(np.sum(y_train == 1))} of {len(y_train)} ({np.mean(y_train):.1%})")
 
     print("Step 3: Setting up preprocessing and Ridge logistic regression pipeline...")
     pipeline = Pipeline(
@@ -67,7 +65,6 @@ def train_ridge_model(
                 LogisticRegression(
                     solver="lbfgs",
                     max_iter=1000,
-                    class_weight=class_weight,
                     random_state=123
                 )
             )
@@ -159,7 +156,7 @@ def train_ridge_model(
 
     # Save model artifact and metadata
     print("Step 9: Packaging model artifact and metadata...")
-    model_version = "v1.0.0"
+    model_version = "v1.1.0"
     model_file = output_path / "stroke_ridge_pipeline.joblib"
     joblib.dump(best_pipeline, model_file)
 
@@ -172,7 +169,7 @@ def train_ridge_model(
         "cv_auc": round(best_cv_auc, 4),
         "test_metrics": test_metrics,
         "predictors": ALL_PREDICTORS,
-        "class_weight_death": death_weight
+        "class_weighting": "none"
     }
 
     metadata_file = output_path / "model_metadata.json"
