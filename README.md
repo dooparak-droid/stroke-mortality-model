@@ -10,7 +10,7 @@ This project ports, packages, and serves a machine learning model predicting 14-
 
 The service is deployed on Render's free tier at [stroke-mortality-model.onrender.com](https://stroke-mortality-model.onrender.com). Opening the link redirects to the interactive API documentation at `/docs`, where the `POST /predict` endpoint can be tried directly in the browser.
 
-Two limitations of the free tier apply. The service sleeps after 15 minutes without traffic, so the first request after a quiet period can take about a minute. The filesystem is also reset on every restart, so prediction logs written by the deployed service are not kept. The drift check in `monitoring/` is intended to be run on logs from a local run.
+Two limitations of the free tier apply. The service sleeps after 15 minutes without traffic, so the first request after a quiet period can take about a minute. The service does not log requests. The drift check is run separately on a CSV of input records (see Drift Monitoring below).
 
 ---
 
@@ -41,8 +41,9 @@ stroke-mortality-model/
 │   ├── features.py             # Feature definitions and preprocessing pipeline
 │   ├── train.py                # Hyperparameter tuning and model training
 │   ├── evaluate.py             # Calibration, Brier score, and discrimination metrics
-│   └── predict.py              # Inference interface
-├── tests/                      # Unit, schema validation, and regression tests
+│   ├── predict.py              # Inference interface
+│   └── reference.py            # Training reference bins and Population Stability Index
+├── tests/                      # Unit, schema validation, regression, and drift tests
 ├── pyproject.toml              # Build system and package configuration
 ├── requirements.txt            # Pinned dependencies
 └── README.md
@@ -111,6 +112,27 @@ curl http://localhost:7860/health
 
 ---
 
+## Drift Monitoring
+
+The drift check compares a batch of incoming records with the training data and reports how much each predictor's distribution has changed. It uses the **Population Stability Index (PSI)**, a single number per predictor that is 0 when the new records are distributed exactly like the training records and grows as they diverge. For a numeric predictor such as age, the training patients are sorted into ten bins holding about 10% of patients each. The share of new patients falling in each bin is then compared with the training share. For each bin, the difference between the two shares is multiplied by the natural logarithm of their ratio, and the ten results are added. For a categorical predictor, each category is a bin.
+
+The conventional reading of PSI is below 0.1 for stable, 0.1 to 0.2 for a moderate shift to monitor, and 0.2 or above for a shift that needs investigation. The report also gives the shift in the mean of each numeric predictor in training standard deviations and the largest change in any category share. These two simpler checks can miss a change in spread. If every new patient had the training mean age, the mean would not move at all, but PSI would flag the change.
+
+The training step stores the bin edges and the training share in each bin for age, systolic blood pressure and delay in `monitoring/reference_stats.json`, together with category shares for the other predictors. No individual patient records are stored.
+
+```bash
+python monitoring/drift_check.py path/to/inputs.csv
+```
+
+The CSV needs columns named as in the API schema, and any predictor it lacks is skipped. Without a file, the script uses a synthetic sample of 500 records from an older cohort with higher blood pressure. On that sample the mean-shift checks report no alert for age, systolic blood pressure or delay, while PSI reports alerts for all three (0.34, 0.29 and 1.76).
+
+Limitations:
+* The deployed service does not log requests, so the CSV has to be assembled separately.
+* PSI is noisy for small batches, and the report adds a note when there are fewer than 100 records.
+* PSI measures change in the inputs only. It does not show whether the model's predictions have become less accurate, which would need observed outcomes.
+
+---
+
 ## API Specification
 
 ### Health Check: `GET /health`
@@ -164,13 +186,13 @@ Example response:
 
 ## Results and Comparison with R Baseline
 
-The R baseline trained its ridge model with inverse-frequency class weighting (deaths counted about 20 times as heavily as survivors). The Python model is trained without class weighting, because the weighting raised every predicted probability towards 50% and left it unusable as a risk estimate. The low event rate is handled instead by the classification threshold. Threshold selection also differs. The R baseline selected Youden's threshold on the holdout test set, whereas the Python implementation optimised the threshold across out-of-fold cross-validation folds before applying it to the untouched holdout test partition.
+The R figures are taken from the output files saved by the R analysis on 16 February 2026. The R script was edited afterwards, and two of the saved files differ slightly from each other (for example test AUC 0.7806 in one and 0.7813 in the other), so the R values are approximate. The two analyses also use different splitting functions, so their test partitions are not identical. The R baseline trained its ridge model with inverse-frequency class weighting (deaths counted about 20 times as heavily as survivors). The Python model is trained without class weighting, because the weighting raised every predicted probability towards 50% and left it unusable as a risk estimate. The low event rate is handled instead by the classification threshold. Threshold selection also differs. The R baseline selected Youden's threshold on the holdout test set, whereas the Python implementation optimised the threshold across out-of-fold cross-validation folds before applying it to the untouched holdout test partition.
 
 | Metric | R Baseline (glmnet, weighted) | Python Implementation (scikit-learn, unweighted) | Notes |
 |---|---|---|---|
 | Model Architecture | Ridge Logistic Regression (L2) | Ridge Logistic Regression (L2) | Standardised predictors |
-| Cross-validation AUC | 0.7813 | 0.7657 | 10-fold stratified CV on the training partition |
-| Test Partition AUC | Not reported separately | 0.8048 | 25% holdout (3,266 patients) |
+| Cross-validation AUC | 0.7718 | 0.7657 | 10-fold CV on the training partition |
+| Test Partition AUC | 0.7813 | 0.8048 | 25% holdout (about 3,265 patients in each analysis) |
 | Brier Score | 0.188 | 0.0412 | Mean squared error of predicted risk. Lower is better. The R value was computed afterwards from the saved R predictions, not reported in the original analysis |
 | Mean Predicted Risk | 39.8% | 4.7% | Observed death rate in the holdout is 4.7% |
 | Youden Decision Threshold | 0.50 (nominal) / 0.55 | 0.0494 | Cutoff on predicted risk. Tuned out-of-fold in Python |

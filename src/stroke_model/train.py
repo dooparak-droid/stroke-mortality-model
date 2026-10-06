@@ -13,6 +13,7 @@ from sklearn.pipeline import Pipeline
 
 from stroke_model.data import load_raw_data, split_cohort_data, TARGET_COLUMN
 from stroke_model.features import ALL_PREDICTORS, create_preprocessor
+from stroke_model.reference import numeric_reference
 from stroke_model.evaluate import (
     compute_youden_threshold,
     evaluate_predictions,
@@ -127,18 +128,7 @@ def train_ridge_model(
 
     # Export reference statistics for drift monitoring
     print("Step 8: Exporting training reference distributions for monitoring...")
-    numeric_stats = {
-        col: {
-            "mean": float(train_df[col].mean()),
-            "std": float(train_df[col].std()),
-            "min": float(train_df[col].min()),
-            "max": float(train_df[col].max()),
-            "median": float(train_df[col].median()),
-            "q25": float(train_df[col].quantile(0.25)),
-            "q75": float(train_df[col].quantile(0.75))
-        }
-        for col in ["age", "sbp", "delay"]
-    }
+    numeric_stats = {col: numeric_reference(train_df[col]) for col in ["age", "sbp", "delay"]}
     categorical_stats = {
         col: train_df[col].value_counts(normalize=True).to_dict()
         for col in ALL_PREDICTORS if col not in ["age", "sbp", "delay"]

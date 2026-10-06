@@ -1,53 +1,27 @@
-"""Input drift detection comparing inference requests against training distributions."""
+"""Input drift detection comparing incoming records against training distributions.
+
+For each numeric predictor the report gives the Population Stability Index (PSI) and the
+shift in the mean in training standard deviations. For each categorical predictor it gives
+the PSI and the largest change in any category share. See stroke_model/reference.py.
+"""
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 import numpy as np
 import pandas as pd
 
+from stroke_model.reference import (
+    MIN_RELIABLE_SAMPLE,
+    bin_shares,
+    categorical_psi,
+    psi_from_shares,
+    psi_status,
+)
 
-def calculate_psi(
-    expected: np.ndarray,
-    actual: np.ndarray,
-    num_bins: int = 10
-) -> float:
-    """Calculate Population Stability Index (PSI) between reference and production data.
-
-    PSI Interpretation:
-        PSI < 0.1: No significant change / stable
-        0.1 <= PSI < 0.2: Moderate shift / monitor closely
-        PSI >= 0.2: Significant drift / investigate and consider retraining
-
-    Args:
-        expected: Reference values from training set.
-        actual: Production/inference values.
-        num_bins: Number of quantiles for binning.
-
-    Returns:
-        Calculated PSI value.
-    """
-    if len(actual) == 0 or len(expected) == 0:
-        return 0.0
-
-    # Determine quantile bins based on reference data
-    percentiles = np.linspace(0, 100, num_bins + 1)
-    bin_edges = np.percentile(expected, percentiles)
-    bin_edges = np.unique(bin_edges)  # Avoid duplicate edges
-
-    if len(bin_edges) < 2:
-        return 0.0
-
-    # Count occurrences in bins
-    expected_counts, _ = np.histogram(expected, bins=bin_edges)
-    actual_counts, _ = np.histogram(actual, bins=bin_edges)
-
-    # Convert to fractions with Laplace smoothing to avoid division by zero
-    expected_pct = (expected_counts + 1e-4) / (len(expected) + 1e-4 * len(expected_counts))
-    actual_pct = (actual_counts + 1e-4) / (len(actual) + 1e-4 * len(actual_counts))
-
-    psi_value = np.sum((actual_pct - expected_pct) * np.log(actual_pct / expected_pct))
-    return float(psi_value)
+NUMERIC_PREDICTORS = ["age", "sbp", "delay"]
+MEAN_SHIFT_ALERT = 0.5  # training standard deviations
+CATEGORY_SHIFT_ALERT = 0.15  # absolute change in a category share
 
 
 def run_drift_analysis(
@@ -75,33 +49,52 @@ def run_drift_analysis(
         "numeric_shifts": {},
         "categorical_shifts": {}
     }
+    if len(production_df) < MIN_RELIABLE_SAMPLE:
+        results["note"] = (
+            f"Only {len(production_df)} records. PSI is noisy for small samples, "
+            f"so treat alerts as provisional."
+        )
 
-    # Check numeric feature drift (mean shift in standard deviations)
-    for col in ["age", "sbp", "delay"]:
+    # Numeric predictors: PSI over training-quantile bins, plus mean shift
+    for col in NUMERIC_PREDICTORS:
         if col in production_df.columns:
-            ref_mean = ref_stats["numeric"][col]["mean"]
-            ref_std = ref_stats["numeric"][col]["std"]
-            prod_mean = float(production_df[col].mean())
-            z_shift = (prod_mean - ref_mean) / ref_std if ref_std > 0 else 0.0
+            ref = ref_stats["numeric"][col]
+            values = production_df[col].dropna().values
+            psi = psi_from_shares(
+                ref["psi_bin_shares"], bin_shares(values, ref["psi_inner_edges"])
+            )
+            ref_std = ref["std"]
+            prod_mean = float(np.mean(values))
+            z_shift = (prod_mean - ref["mean"]) / ref_std if ref_std > 0 else 0.0
 
             results["numeric_shifts"][col] = {
-                "reference_mean": round(ref_mean, 2),
+                "psi": round(psi, 4),
+                "psi_status": psi_status(psi),
+                "reference_mean": round(ref["mean"], 2),
                 "production_mean": round(prod_mean, 2),
                 "z_score_shift": round(z_shift, 3),
-                "status": "DRIFT_ALERT" if abs(z_shift) >= 0.5 else "STABLE"
+                "mean_shift_status": (
+                    "DRIFT_ALERT" if abs(z_shift) >= MEAN_SHIFT_ALERT else "STABLE"
+                ),
             }
 
-    # Check categorical feature distribution differences
+    # Categorical predictors: PSI over category shares, plus largest share change
     for col, ref_dist in ref_stats.get("categorical", {}).items():
         if col in production_df.columns:
-            prod_dist = production_df[col].value_counts(normalize=True).to_dict()
+            values = production_df[col].dropna()
+            psi = categorical_psi(ref_dist, values)
+            prod_dist = values.value_counts(normalize=True).to_dict()
             max_diff = max(
                 abs(prod_dist.get(cat, 0.0) - ref_dist.get(cat, 0.0))
                 for cat in set(ref_dist.keys()) | set(prod_dist.keys())
             )
             results["categorical_shifts"][col] = {
+                "psi": round(psi, 4),
+                "psi_status": psi_status(psi),
                 "max_percentage_point_difference": round(max_diff * 100, 2),
-                "status": "DRIFT_ALERT" if max_diff >= 0.15 else "STABLE"
+                "share_shift_status": (
+                    "DRIFT_ALERT" if max_diff >= CATEGORY_SHIFT_ALERT else "STABLE"
+                ),
             }
 
     return results
@@ -117,15 +110,15 @@ if __name__ == "__main__":
         prod_data = pd.read_csv(log_csv)
     else:
         print("No log CSV provided. Generating synthetic production sample for demonstration...")
-        # Create a small sample mimicking a slightly older cohort
-        np.random.seed(42)
-        n = 100
+        # Synthetic sample of a slightly different cohort (older, higher blood pressure)
+        rng = np.random.default_rng(42)
+        n = 500
         prod_data = pd.DataFrame({
-            "age": np.random.normal(73, 10, n),
-            "sbp": np.random.normal(162, 25, n),
-            "delay": np.random.uniform(5, 30, n),
-            "gender": np.random.choice(["M", "F"], n),
-            "consc": np.random.choice(["F", "D"], n, p=[0.85, 0.15])
+            "age": rng.normal(76, 10, n).round(),
+            "sbp": rng.normal(168, 25, n).round(),
+            "delay": rng.uniform(5, 30, n).round(),
+            "gender": rng.choice(["M", "F"], n),
+            "consc": rng.choice(["F", "D"], n, p=[0.85, 0.15])
         })
 
     report = run_drift_analysis(prod_data, ref_json)
