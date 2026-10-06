@@ -181,7 +181,9 @@ The R baseline trained its ridge model with inverse-frequency class weighting (d
 
 For reference, a model that gave every patient the same risk of 4.7% would have a Brier score of about 0.045. The R model's Brier score is far above this because of the weighting. An earlier Python run with the same class weighting as R gave a test AUC of 0.8029 and a Brier score of 0.1891, so removing the weighting did not change how well patients are ranked.
 
-At the Python threshold of 0.0494, about 27% of holdout patients are flagged high risk, and about 13% of flagged patients died. The flag is therefore a screening flag. The calibration curve is stored at `reports/calibration_plot.png`.
+At the Python threshold of 0.0494, about 27% of holdout patients are flagged high risk, and about 13% of flagged patients died. The flag is therefore a screening flag.
+
+The calibration curve is stored at `reports/calibration_plot.png`. It sorts the holdout patients into ten equal groups of about 330 by predicted risk and compares the mean predicted risk in each group with the proportion who died. In the highest-risk group the two agree closely (predicted 0.18, observed 0.19). In the groups with predicted risk below about 0.035 the model slightly overestimates risk, with each of these groups containing fewer than 10 deaths. In two middle groups it underestimates (predicted 0.053 and 0.080, observed 0.083 and 0.089), and these groups contain about 27 and 29 deaths. Differences of this size could partly be chance. No recalibration was applied.
 
 ---
 
