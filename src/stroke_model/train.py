@@ -173,5 +173,5 @@ def train_ridge_model(
 if __name__ == "__main__":
     import sys
     # Default to data in parent directory if not specified
-    raw_path = sys.argv[1] if len(sys.argv) > 1 else "../assignment2026.csv"
+    raw_path = sys.argv[1] if len(sys.argv) > 1 else "../stroke_dataset.csv"
     train_ridge_model(raw_path)

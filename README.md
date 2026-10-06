@@ -67,7 +67,7 @@ pip install -e ".[dev]"
 
 ### 2. Training the Model
 
-Place `assignment2026.csv` in the root workspace (this file is excluded from version control via `.gitignore`). Run the training script:
+Place `stroke_dataset.csv` in the root workspace (this file is excluded from version control via `.gitignore`). Run the training script:
 
 ```bash
 python -m stroke_model.train
