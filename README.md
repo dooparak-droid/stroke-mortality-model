@@ -2,7 +2,7 @@
 
 > **Research demonstration only. Not for clinical use or medical decision-making.**
 
-This project ports, packages, and serves a machine learning model predicting 14-day mortality following acute stroke. The model is trained on a subset of the International Stroke Trial database, described under Data below. It builds upon earlier exploratory analysis conducted in R (available at [Evaluating-survival-probability-after-a-stroke](https://github.com/dooparak-droid/Evaluating-survival-probability-after-a-stroke)), re-implementing the complete lifecycle in Python with an emphasis on rigorous validation, model calibration, automated testing, containerised deployment, and drift monitoring.
+This project trains, packages, and serves a machine learning model predicting 14-day mortality following acute stroke. The model is trained on a subset of the International Stroke Trial database, described under Data below. The Python implementation covers the complete lifecycle, with an emphasis on validation, model calibration, automated testing, containerised deployment, and drift monitoring. An earlier exploratory analysis of a related file in R is available at [Evaluating-survival-probability-after-a-stroke](https://github.com/dooparak-droid/Evaluating-survival-probability-after-a-stroke). It used a narrower outcome definition, and its relation to this project is described under Results.
 
 ---
 
@@ -18,10 +18,10 @@ Two limitations of the free tier apply. The service sleeps after 15 minutes with
 
 In acute stroke care, early mortality risk assessment can assist in triage, resource planning, and identifying patients at elevated risk of deterioration. 
 
-A primary methodological challenge in this cohort is the severe **class imbalance**, with an observed event rate of **4.7%**. Standard evaluation approaches that focus purely on accuracy or discrimination (such as the Area Under the ROC Curve) can be misleading:
-* A model can achieve an AUC of 0.80 while still predicting risks that are systematically too high or too low.
+A primary methodological challenge in this cohort is the severe **class imbalance**, with an observed event rate of **5.1%**. Standard evaluation approaches that focus purely on accuracy or discrimination (such as the Area Under the ROC Curve) can be misleading:
+* A model can achieve a respectable AUC while still predicting risks that are systematically too high or too low.
 * For rare adverse events, **calibration** (assessed via calibration curves and Brier score) is vital to ensure that a predicted probability of 10% genuinely corresponds to roughly 10 observed deaths per 100 similar patients.
-* The classification threshold must be chosen deliberately. Here, **Youden's J statistic** is optimised strictly on cross-validation folds to balance sensitivity and specificity without data leakage into the test set. Because the event rate is low, the resulting threshold on predicted risk is also low (about 0.049), and the high-risk flag is a screening flag and not a confident prediction of death.
+* The classification threshold must be chosen deliberately. Here, **Youden's J statistic** is optimised strictly on cross-validation folds to balance sensitivity and specificity without data leakage into the test set. Because the event rate is low, the resulting threshold on predicted risk is also low (about 0.054), and the high-risk flag is a screening flag and not a confident prediction of death.
 
 ---
 
@@ -34,11 +34,23 @@ The training data are a subset of the **International Stroke Trial (IST)** datab
 * **Licence:** Open Data Commons Attribution License (ODC-By) v1.0, as shown on the DataShare record.
 * **Not committed:** the data file is not stored in this repository, and the container does not include it. It must be obtained from the source above.
 
-The 13,063 patients used here are those from the IST database who were alert or drowsy at randomisation (patients recorded as unconscious are excluded), had a recorded value for each of the 22 predictors (including each of the eight neurological deficit variables, so patients with a deficit marked "cannot assess" are excluded), and had a known death status on the discharge form. Selecting patients this way from the IST file `IST_corrected.csv` reproduces the training file exactly, with the same 13,063 rows and 612 deaths.
+**Selection of patients.** The 13,063 patients used here are those from the IST database who:
+1. were alert or drowsy at randomisation (patients recorded as unconscious are excluded);
+2. had a recorded value for each of the 22 predictors (including each of the eight neurological deficit variables, so patients with a deficit marked "cannot assess" are excluded); and
+3. had a known death status on the discharge form (IST variable `DDEAD` recorded as Y or N).
 
-**Outcome.** The outcome is death within 14 days of randomisation that was recorded on the discharge form (IST variables `DDEAD` = Y and `ID14` = 1). There are 612 such deaths (4.7%). In the same 13,063 patients, the IST 14-day death indicator `ID14` flags 55 further deaths that were not recorded as deaths on the discharge form. These patients are coded as survivors here, so the outcome is slightly narrower than death within 14 days from all sources.
+The third rule is not needed to define the outcome below. It is kept so that the patient set is identical to the one used in the earlier R analysis. All 13,063 selected patients have a known 14-day status.
 
-IST variables map to the columns of `stroke_dataset.csv` as follows: `RDELAY` to `delay`, `RCONSC` to `consc`, `SEX` to `gender`, `AGE` to `age`, `RSLEEP` to `wakesym`, `RATRIAL` to `atrial`, `RCT` to `CT`, `RVISINF` to `Infarc`, `RHEP24` to `hep24`, `RASP3` to `asp3`, `RSBP` to `sbp`, `RDEF1` to `RDEF8` to `symptom1` to `symptom8`, `STYPE` to `subtype`, `RXHEP` to `treat1`, `RXASP` to `treat2`, and the outcome described below to `death`.
+**Outcome.** The outcome `death` is 1 when the IST 14-day death indicator `ID14` is 1, and 0 otherwise. `ID14` marks death within 14 days of randomisation as determined by the trial, including deaths that the discharge form does not record. There are 667 such deaths among the 13,063 patients (5.1%). The derivation matters because IST records death in two places that do not always agree:
+* 612 patients died within 14 days and the death is also recorded on the discharge form (`DDEAD` = Y).
+* 55 patients died within 14 days but the discharge form does not record a death (`DDEAD` = N). For 41 of the 55 the form says the patient was alive when they left hospital. They are counted as deaths here. An outcome restricted to deaths recorded on the discharge form would have 612 deaths (4.7%).
+* A further 153 patients have a death recorded on the discharge form, but the time to death in IST is 15 days or longer. They are counted as survivors, because they were alive at day 14.
+
+**Reproducing the training file.** `scripts/build_dataset.py` applies these rules to `IST_corrected.csv` from the DataShare record and writes the training file locally. The file is not committed. The IST variables map to the columns of the file as follows: `RDELAY` to `delay`, `RCONSC` to `consc`, `SEX` to `gender`, `AGE` to `age`, `RSLEEP` to `wakesym`, `RATRIAL` to `atrial`, `RCT` to `CT`, `RVISINF` to `Infarc`, `RHEP24` to `hep24`, `RASP3` to `asp3`, `RSBP` to `sbp`, `RDEF1` to `RDEF8` to `symptom1` to `symptom8`, `STYPE` to `subtype`, `RXHEP` to `treat1`, `RXASP` to `treat2`, and `ID14` to `death`.
+
+```bash
+python scripts/build_dataset.py --ist-csv path/to/IST_corrected.csv --out ../ist_stroke_14day.csv
+```
 
 The predictors include the treatment allocated in the trial (heparin dose and aspirin), as well as age, systolic blood pressure, delay from stroke onset to randomisation, stroke subtype and the neurological deficits recorded at randomisation.
 
@@ -53,6 +65,7 @@ stroke-mortality-model/
 ├── monitoring/                 # Reference distributions and drift detection
 ├── models/                     # Serialised model pipelines and metadata
 ├── reports/                    # Calibration curves, ROC plots, and evaluation tables
+├── scripts/build_dataset.py    # Builds the training file from the IST database
 ├── src/stroke_model/
 │   ├── __init__.py
 │   ├── api.py                  # FastAPI service with validated schemas
@@ -86,7 +99,7 @@ pip install -e ".[dev]"
 
 ### 2. Training the Model
 
-Obtain the data from the International Stroke Trial source described under Data, prepare `stroke_dataset.csv` as described there and place it in the root workspace. The file is not committed to this repository and is excluded from version control via `.gitignore`. Run the training script:
+Download `IST_corrected.csv` from the International Stroke Trial source described under Data and build the training file with `scripts/build_dataset.py`, writing it to `../ist_stroke_14day.csv` (the default location the training script reads). The file is not committed to this repository and is excluded from version control via `.gitignore`. Run the training script:
 
 ```bash
 python -m stroke_model.train
@@ -143,7 +156,7 @@ The training step stores the bin edges and the training share in each bin for ag
 python monitoring/drift_check.py path/to/inputs.csv
 ```
 
-The CSV needs columns named as in the API schema, and any predictor it lacks is skipped. Without a file, the script uses a synthetic sample of 500 records from an older cohort with higher blood pressure. On that sample the mean-shift checks report no alert for age, systolic blood pressure or delay, while PSI reports alerts for all three (0.34, 0.29 and 1.76).
+The CSV needs columns named as in the API schema, and any predictor it lacks is skipped. Without a file, the script uses a synthetic sample of 500 records from an older cohort with higher blood pressure. On that sample the mean-shift checks report no alert for age, systolic blood pressure or delay, while PSI reports alerts for all three (0.33, 0.30 and 1.80).
 
 Limitations:
 * The deployed service does not log requests, so the CSV has to be assembled separately.
@@ -156,7 +169,7 @@ Limitations:
 
 ### Version numbers
 
-The service reports two version numbers that mean different things. The API version (shown on the `/docs` page) is the version of the software, set by `version` in `pyproject.toml` and currently 0.1.0. The model version (`model_version` in the `/health` and `/predict` responses) is the version of the trained model artefact in `models/`, currently v1.1.0. The API version changes when the code changes, and the model version changes when the model is retrained.
+The service reports two version numbers that mean different things. The API version (shown on the `/docs` page) is the version of the software, set by `version` in `pyproject.toml` and currently 0.1.0. The model version (`model_version` in the `/health` and `/predict` responses) is the version of the trained model artefact in `models/`, currently v2.0.0. The API version changes when the code changes, and the model version changes when the model is retrained. Version 2.0.0 changed the outcome definition (see Data), so its predictions are not comparable with those of version 1.1.0.
 
 ### Health Check: `GET /health`
 Returns service status, the active model version and the classification threshold.
@@ -197,46 +210,50 @@ curl -X POST "http://localhost:8000/predict" \
 Example response:
 ```json
 {
-  "mortality_probability": 0.0187,
+  "mortality_probability": 0.0213,
   "high_risk_flag": false,
-  "threshold_applied": 0.0494,
-  "model_version": "v1.1.0",
+  "threshold_applied": 0.0544,
+  "model_version": "v2.0.0",
   "disclaimer": "Research demonstration only. Not for clinical use or medical decision-making."
 }
 ```
 
 ---
 
-## Results and Comparison with R Baseline
+## Results
 
-The R figures are taken from the output files saved by the R analysis on 16 February 2026. The R script was edited afterwards, and two of the saved files differ slightly from each other (for example test AUC 0.7806 in one and 0.7813 in the other), so the R values are approximate. The two analyses also use different splitting functions, so their test partitions are not identical. The R baseline trained its ridge model with inverse-frequency class weighting (deaths counted about 20 times as heavily as survivors). The Python model is trained without class weighting, because the weighting raised every predicted probability towards 50% and left it unusable as a risk estimate. The low event rate is handled instead by the classification threshold. Threshold selection also differs. The R baseline selected Youden's threshold on the holdout test set, whereas the Python implementation optimised the threshold across out-of-fold cross-validation folds before applying it to the untouched holdout test partition.
+All figures are for the 25% holdout test partition (3,266 patients, 167 deaths) unless stated. The model is a ridge logistic regression trained without class weighting. The classification threshold was chosen by Youden's J on out-of-fold predictions from the training partition, so the test partition played no part in choosing it.
 
-| Metric | R Baseline (glmnet, weighted) | Python Implementation (scikit-learn, unweighted) | Notes |
-|---|---|---|---|
-| Model Architecture | Ridge Logistic Regression (L2) | Ridge Logistic Regression (L2) | Standardised predictors |
-| Cross-validation AUC | 0.7718 | 0.7657 | 10-fold CV on the training partition |
-| Test Partition AUC | 0.7813 | 0.8048 (95% CI 0.7695 to 0.8385) | 25% holdout (about 3,265 patients in each analysis). The interval is a bootstrap interval |
-| Brier Score | 0.188 | 0.0412 (95% CI 0.0400 to 0.0424) | Mean squared error of predicted risk. Lower is better. The R value was computed afterwards from the saved R predictions, not reported in the original analysis |
-| Mean Predicted Risk | 39.8% | 4.7% | Observed death rate in the holdout is 4.7% |
-| Youden Decision Threshold | 0.50 (nominal) / 0.55 | 0.0494 | Cutoff on predicted risk. Tuned out-of-fold in Python |
-| Test Sensitivity | 69.1% | 73.2% | Share of deaths flagged high risk |
-| Test Specificity | 75.3% | 75.0% | Share of survivors not flagged |
-| Test Precision | Not reported | 12.6% | Share of flagged patients who died |
-| Test F1-Score | 0.2016 | 0.2146 | Harmonic mean of precision and sensitivity |
+| Metric | Value | Notes |
+|---|---|---|
+| Cross-validation AUC | 0.7701 | 10-fold CV on the training partition (9,797 patients) |
+| Test AUC | 0.7754 (95% CI 0.7400 to 0.8097) | Bootstrap interval |
+| Brier score | 0.0457 (95% CI 0.0444 to 0.0470) | Mean squared error of predicted risk. Lower is better |
+| Mean predicted risk | 5.2% | The observed death rate in the holdout is 5.1% |
+| Youden threshold | 0.0544 | Cutoff on predicted risk. Patients at or above it are flagged high risk |
+| Sensitivity | 67.1% | Share of deaths flagged high risk (112 of 167) |
+| Specificity | 74.0% | Share of survivors not flagged (2,292 of 3,099) |
+| Precision | 12.2% | Share of flagged patients who died (112 of 919) |
+| F1 score | 0.2063 | Harmonic mean of precision and sensitivity |
+| Flagged high risk | 28.1% | Share of all holdout patients (919 of 3,266) |
 
-The cross-validated AUC (0.7657) is calculated on the training partition, with each model scored on a fold it was not fitted on, and the test AUC (0.8048) is calculated on the separate 25% holdout, so the two come from different data. The 95% intervals come from 2,000 bootstrap resamples of the holdout (3,266 patients, 153 deaths), drawn separately from the deaths and the survivors so that every resample contains deaths, and they show how far a single 25% holdout can move the estimate. The R test AUC lies inside the Python interval.
+The cross-validated AUC (0.7701) is calculated on the training partition, with each model scored on a fold it was not fitted on, and the test AUC (0.7754) is calculated on the separate 25% holdout, so the two come from different data. The 95% intervals come from 2,000 bootstrap resamples of the holdout, drawn separately from the deaths and the survivors so that every resample contains deaths, and they show how far a single 25% holdout can move the estimate.
 
-For reference, a model that gave every patient the same risk of 4.7% would have a Brier score of about 0.045. The R model's Brier score is far above this because of the weighting. An earlier Python run with the same class weighting as R gave a test AUC of 0.8029 and a Brier score of 0.1891, so removing the weighting did not change how well patients are ranked.
+A model that gave every patient the same risk of 5.1% would have a Brier score of about 0.048, so this model improves on that reference by a modest margin. Training with inverse-frequency class weighting (deaths counted about 19 times as heavily as survivors) gave a test AUC of 0.7755 and a Brier score of 0.1920, with a mean predicted risk of 40.4%. Weighting therefore did not change how well patients are ranked, and it made the predicted risks unusable as probabilities, so the final model is trained without it. The low event rate is handled instead by the classification threshold.
 
-At the Python threshold of 0.0494, about 27% of holdout patients are flagged high risk, and about 13% of flagged patients died. The flag is therefore a screening flag.
+At the threshold of 0.0544, 28.1% of holdout patients are flagged high risk, and 12.2% of flagged patients died. The flag is therefore a screening flag.
 
-The calibration curve is stored at `reports/calibration_plot.png`. It sorts the holdout patients into ten equal groups of about 330 by predicted risk and compares the mean predicted risk in each group with the proportion who died. In the highest-risk group the two agree closely (predicted 0.18, observed 0.19). In the groups with predicted risk below about 0.035 the model slightly overestimates risk, with each of these groups containing fewer than 10 deaths. In two middle groups it underestimates (predicted 0.053 and 0.080, observed 0.083 and 0.089), and these groups contain about 27 and 29 deaths. Differences of this size could partly be chance. No recalibration was applied.
+The calibration curve is stored at `reports/calibration_plot.png`. It sorts the holdout patients into ten equal groups of about 327 by predicted risk and compares the mean predicted risk in each group with the proportion who died. In the highest-risk group the two agree closely (predicted 0.197, observed 0.187, 61 deaths). In the ninth group the model underestimates risk (predicted 0.090, observed 0.116, 38 deaths), and in the third-lowest group it overestimates (predicted 0.019, observed 0.006, 2 deaths). In the other seven groups the predicted and observed values are within 0.01 of each other. Differences of this size could partly be chance, because most groups contain few deaths. No recalibration was applied.
+
+### Relation to the earlier R analysis
+
+An earlier exploratory analysis in R used a narrower outcome (death within 14 days recorded on the discharge form, 612 deaths, 4.7%), trained with class weighting and chose its threshold on the test partition. Its saved outputs, produced on 16 February 2026 by a version of the script that has since been edited, show a cross-validation AUC of 0.7718, a test AUC of about 0.78 (0.7806 and 0.7813 in two saved files), a mean predicted risk of 39.8% and a Brier score of 0.188 (computed afterwards from the saved predictions). The outcome definition, the data split and the weighting all differ from this project, so these figures are not directly comparable with the table above.
 
 ---
 
 ## Limitations and Governance
 
-1. **Source data:** The data are an anonymised, publicly released subset of the International Stroke Trial database (see Data), restricted to patients who were not unconscious at randomisation, had complete data on the 22 predictors and had a known death status at discharge. The outcome is death within 14 days recorded on the discharge form, which omits 55 deaths within 14 days that were not recorded at discharge. The data file is not included in this repository.
+1. **Source data:** The data are an anonymised, publicly released subset of the International Stroke Trial database (see Data), restricted to patients who were not unconscious at randomisation, had complete data on the 22 predictors and had a known death status on the discharge form. The outcome is death within 14 days from IST's indicator `ID14`, which includes 55 deaths that were not recorded on the discharge form. The data file is not included in this repository.
 2. **Trial population and era:** Patients were recruited between 1991 and 1996 into a randomised trial run across many countries. Unconscious patients are excluded, and the treatment allocated in the trial (heparin and aspirin) is one of the predictors. The model therefore reflects that trial population and not current stroke care.
 3. **No External Validation:** The model has only undergone internal cross-validation and split-sample holdout testing. Generalisability across different clinical settings remains unverified.
 4. **Research Demonstration:** This repository is an educational software engineering and machine learning lifecycle demonstration. It must not be deployed in real clinical care or used to influence medical decisions.

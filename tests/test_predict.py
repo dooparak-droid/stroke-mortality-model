@@ -124,10 +124,10 @@ def test_clinical_monotonicity_subtype():
 
 
 def test_model_regression_snapshot():
-    """Golden regression test: fixed synthetic patients must match the saved v1.1.0 baseline.
+    """Golden regression test: fixed synthetic patients must match the saved v2.0.0 baseline.
 
     The model is trained without class weighting, so predicted probabilities sit on the
-    scale of the observed death rate (about 4.7%). The Youden threshold is about 0.049.
+    scale of the observed death rate (about 5.1%). The Youden threshold is about 0.054.
     """
     predictor = StrokePredictor()
 
@@ -143,7 +143,7 @@ def test_model_regression_snapshot():
 
 
 def test_probabilities_on_observed_risk_scale():
-    """The typical synthetic patient must not receive a risk far above the 4.7% death rate.
+    """The typical synthetic patient must not receive a risk far above the 5.1% death rate.
 
     Guards against reintroducing class weighting, which shifts probabilities towards 50%.
     """

@@ -152,7 +152,7 @@ def train_ridge_model(
 
     # Save model artifact and metadata
     print("Step 9: Packaging model artifact and metadata...")
-    model_version = "v1.1.0"
+    model_version = "v2.0.0"
     model_file = output_path / "stroke_ridge_pipeline.joblib"
     joblib.dump(best_pipeline, model_file)
 
@@ -166,6 +166,10 @@ def train_ridge_model(
         "test_metrics": test_metrics,
         "predictors": ALL_PREDICTORS,
         "class_weighting": "none",
+        "outcome_definition": "Death within 14 days of randomisation (International Stroke Trial indicator ID14), including deaths not recorded on the discharge form",
+        "n_training_patients": len(train_df),
+        "n_test_patients": len(test_df),
+        "n_test_deaths": int(np.sum(y_test == 1)),
         "test_metric_intervals": test_intervals
     }
 
@@ -180,5 +184,5 @@ def train_ridge_model(
 if __name__ == "__main__":
     import sys
     # Default to data in parent directory if not specified
-    raw_path = sys.argv[1] if len(sys.argv) > 1 else "../stroke_dataset.csv"
+    raw_path = sys.argv[1] if len(sys.argv) > 1 else "../ist_stroke_14day.csv"
     train_ridge_model(raw_path)
