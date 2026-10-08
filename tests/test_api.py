@@ -99,3 +99,17 @@ def test_predict_rejects_invalid_categorical_level():
         invalid_record = dict(SYNTHETIC_PATIENT, consc="XYZ")
         response = client.post("/predict", json=invalid_record)
         assert response.status_code == 422
+
+
+def test_api_version_matches_package_and_health_reports_model_version():
+    """The API version is the package version, which is separate from the model version."""
+    import json
+    from importlib.metadata import version
+    from pathlib import Path
+
+    metadata = json.loads(
+        (Path(__file__).resolve().parent.parent / "models" / "model_metadata.json").read_text()
+    )
+    assert app.version == version("stroke-model")
+    with TestClient(app) as client:
+        assert client.get("/health").json()["model_version"] == metadata["model_version"]

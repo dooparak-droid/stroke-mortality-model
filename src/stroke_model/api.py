@@ -1,12 +1,19 @@
 """FastAPI service exposing model inference and health endpoints."""
 
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as package_version
 from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from stroke_model.predict import StrokePredictor
+
+try:
+    # Software version, read from the package metadata set in pyproject.toml
+    API_VERSION = package_version("stroke-model")
+except PackageNotFoundError:
+    from stroke_model import __version__ as API_VERSION
 
 # Global predictor instance loaded on startup
 predictor: Optional[StrokePredictor] = None
@@ -27,7 +34,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Stroke 14-Day Mortality Prediction Service",
     description="Research demonstration for acute stroke mortality risk assessment. Not for clinical use.",
-    version="0.1.0",
+    version=API_VERSION,
     lifespan=lifespan
 )
 

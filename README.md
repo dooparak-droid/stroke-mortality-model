@@ -135,8 +135,12 @@ Limitations:
 
 ## API Specification
 
+### Version numbers
+
+The service reports two version numbers that mean different things. The API version (shown on the `/docs` page) is the version of the software, set by `version` in `pyproject.toml` and currently 0.1.0. The model version (`model_version` in the `/health` and `/predict` responses) is the version of the trained model artefact in `models/`, currently v1.1.0. The API version changes when the code changes, and the model version changes when the model is retrained.
+
 ### Health Check: `GET /health`
-Returns service status and the active model version.
+Returns service status, the active model version and the classification threshold.
 
 ### Prediction: `POST /predict`
 Validates 22 patient predictors and returns the estimated mortality probability alongside the classification decision based on the pre-specified Youden threshold.
@@ -192,14 +196,16 @@ The R figures are taken from the output files saved by the R analysis on 16 Febr
 |---|---|---|---|
 | Model Architecture | Ridge Logistic Regression (L2) | Ridge Logistic Regression (L2) | Standardised predictors |
 | Cross-validation AUC | 0.7718 | 0.7657 | 10-fold CV on the training partition |
-| Test Partition AUC | 0.7813 | 0.8048 | 25% holdout (about 3,265 patients in each analysis) |
-| Brier Score | 0.188 | 0.0412 | Mean squared error of predicted risk. Lower is better. The R value was computed afterwards from the saved R predictions, not reported in the original analysis |
+| Test Partition AUC | 0.7813 | 0.8048 (95% CI 0.7695 to 0.8385) | 25% holdout (about 3,265 patients in each analysis). The interval is a bootstrap interval |
+| Brier Score | 0.188 | 0.0412 (95% CI 0.0400 to 0.0424) | Mean squared error of predicted risk. Lower is better. The R value was computed afterwards from the saved R predictions, not reported in the original analysis |
 | Mean Predicted Risk | 39.8% | 4.7% | Observed death rate in the holdout is 4.7% |
 | Youden Decision Threshold | 0.50 (nominal) / 0.55 | 0.0494 | Cutoff on predicted risk. Tuned out-of-fold in Python |
 | Test Sensitivity | 69.1% | 73.2% | Share of deaths flagged high risk |
 | Test Specificity | 75.3% | 75.0% | Share of survivors not flagged |
 | Test Precision | Not reported | 12.6% | Share of flagged patients who died |
 | Test F1-Score | 0.2016 | 0.2146 | Harmonic mean of precision and sensitivity |
+
+The cross-validated AUC (0.7657) is calculated on the training partition, with each model scored on a fold it was not fitted on, and the test AUC (0.8048) is calculated on the separate 25% holdout, so the two come from different data. The 95% intervals come from 2,000 bootstrap resamples of the holdout (3,266 patients, 153 deaths), drawn separately from the deaths and the survivors so that every resample contains deaths, and they show how far a single 25% holdout can move the estimate. The R test AUC lies inside the Python interval.
 
 For reference, a model that gave every patient the same risk of 4.7% would have a Brier score of about 0.045. The R model's Brier score is far above this because of the weighting. An earlier Python run with the same class weighting as R gave a test AUC of 0.8029 and a Brier score of 0.1891, so removing the weighting did not change how well patients are ranked.
 

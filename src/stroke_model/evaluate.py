@@ -84,6 +84,61 @@ def evaluate_predictions(
     }
 
 
+def bootstrap_metric_intervals(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    n_resamples: int = 2000,
+    seed: int = 123,
+    confidence: float = 0.95
+) -> Dict[str, Any]:
+    """Bootstrap confidence intervals for the AUC and Brier score on a holdout set.
+
+    Resampling is stratified by outcome. Deaths are drawn with replacement from the deaths
+    and survivors from the survivors, so every resample keeps the original number of each
+    and always contains deaths. Intervals are the percentile intervals of the resampled
+    metrics. The saved model and its predictions are not changed.
+
+    Args:
+        y_true: Binary ground truth outcomes of the holdout set.
+        y_prob: Predicted probabilities for the holdout set.
+        n_resamples: Number of bootstrap resamples.
+        seed: Seed for the random number generator.
+        confidence: Confidence level of the interval.
+
+    Returns:
+        Dictionary with the lower and upper limits for each metric and the settings used.
+    """
+    y_true = np.asarray(y_true)
+    y_prob = np.asarray(y_prob)
+    rng = np.random.default_rng(seed)
+
+    death_idx = np.flatnonzero(y_true == 1)
+    survivor_idx = np.flatnonzero(y_true == 0)
+
+    aucs = np.empty(n_resamples)
+    briers = np.empty(n_resamples)
+    for i in range(n_resamples):
+        idx = np.concatenate([
+            rng.choice(death_idx, size=len(death_idx), replace=True),
+            rng.choice(survivor_idx, size=len(survivor_idx), replace=True)
+        ])
+        aucs[i] = roc_auc_score(y_true[idx], y_prob[idx])
+        briers[i] = brier_score_loss(y_true[idx], y_prob[idx])
+
+    tail = (1.0 - confidence) / 2.0 * 100.0
+    auc_lower, auc_upper = np.percentile(aucs, [tail, 100.0 - tail])
+    brier_lower, brier_upper = np.percentile(briers, [tail, 100.0 - tail])
+
+    return {
+        "auc": {"lower": round(float(auc_lower), 4), "upper": round(float(auc_upper), 4)},
+        "brier_score": {"lower": round(float(brier_lower), 4), "upper": round(float(brier_upper), 4)},
+        "confidence_level": confidence,
+        "n_resamples": n_resamples,
+        "seed": seed,
+        "method": "stratified percentile bootstrap of the holdout set"
+    }
+
+
 def plot_calibration(
     y_true: np.ndarray,
     y_prob: np.ndarray,

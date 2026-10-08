@@ -15,6 +15,7 @@ from stroke_model.data import load_raw_data, split_cohort_data, TARGET_COLUMN
 from stroke_model.features import ALL_PREDICTORS, create_preprocessor
 from stroke_model.reference import numeric_reference
 from stroke_model.evaluate import (
+    bootstrap_metric_intervals,
     compute_youden_threshold,
     evaluate_predictions,
     plot_calibration
@@ -121,6 +122,11 @@ def train_ridge_model(
     print(f"  Test Sensitivity: {test_metrics['sensitivity']:.4f}")
     print(f"  Test Specificity: {test_metrics['specificity']:.4f}")
 
+    print("  Bootstrapping 95% intervals for test AUC and Brier score (2,000 resamples)...")
+    test_intervals = bootstrap_metric_intervals(y_test, test_probs)
+    print(f"  Test AUC 95% CI: {test_intervals['auc']['lower']:.4f} to {test_intervals['auc']['upper']:.4f}")
+    print(f"  Test Brier 95% CI: {test_intervals['brier_score']['lower']:.4f} to {test_intervals['brier_score']['upper']:.4f}")
+
     # Generate calibration plot
     cal_plot_path = reports_path / "calibration_plot.png"
     plot_calibration(y_test, test_probs, cal_plot_path)
@@ -159,7 +165,8 @@ def train_ridge_model(
         "cv_auc": round(best_cv_auc, 4),
         "test_metrics": test_metrics,
         "predictors": ALL_PREDICTORS,
-        "class_weighting": "none"
+        "class_weighting": "none",
+        "test_metric_intervals": test_intervals
     }
 
     metadata_file = output_path / "model_metadata.json"
