@@ -1,9 +1,11 @@
 """Model evaluation metrics: discrimination, calibration, and classification tables."""
 
+import json
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, List, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     brier_score_loss,
@@ -137,6 +139,130 @@ def bootstrap_metric_intervals(
         "seed": seed,
         "method": "stratified percentile bootstrap of the holdout set"
     }
+
+
+# Subgroups for the calibration-by-subgroup report: (column, title, group order)
+AGE_BANDS = [(0, 59, "<60"), (60, 69, "60-69"), (70, 79, "70-79"), (80, 200, "80+")]
+SUBGROUP_ORDER = {
+    "gender": ["F", "M"],
+    "subtype": ["LACS", "PACS", "POCS", "TACS", "OTH"],
+}
+SUBGROUP_TITLES = {"age_band": "Age band", "gender": "Sex", "subtype": "Stroke subtype"}
+
+
+def wilson_interval(deaths: int, n: int, z: float = 1.96) -> Tuple[float, float]:
+    """Wilson 95% confidence interval for an observed proportion.
+
+    Unlike the simple normal interval, it stays within 0 and 1 and behaves sensibly for small
+    groups and for groups with no deaths.
+    """
+    if n == 0:
+        return float("nan"), float("nan")
+    p_hat = deaths / n
+    denom = 1.0 + z * z / n
+    centre = (p_hat + z * z / (2 * n)) / denom
+    half = z * np.sqrt(p_hat * (1 - p_hat) / n + z * z / (4 * n * n)) / denom
+    return float(max(0.0, centre - half)), float(min(1.0, centre + half))
+
+
+def subgroup_calibration(
+    features: pd.DataFrame,
+    y_true: np.ndarray,
+    y_prob: np.ndarray
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Compare mean predicted risk with the observed death rate within patient subgroups.
+
+    Patients are grouped by a covariate (age band, sex or stroke subtype). Within each group
+    the table gives the number of patients and deaths, the mean predicted risk, the observed
+    death rate and its Wilson 95% interval. A calibrated model has a mean predicted risk
+    inside the interval of the observed rate. This is a check on the holdout set and does not
+    change the model.
+
+    Args:
+        features: Holdout predictors, including age, gender and subtype.
+        y_true: Binary outcomes for the same patients.
+        y_prob: Predicted probabilities for the same patients.
+
+    Returns:
+        Dictionary keyed by "age_band", "gender" and "subtype", each a list of group rows.
+    """
+    data = pd.DataFrame({
+        "age": features["age"].values,
+        "gender": features["gender"].values,
+        "subtype": features["subtype"].values,
+        "outcome": np.asarray(y_true),
+        "pred": np.asarray(y_prob),
+    })
+    data["age_band"] = ""
+    for low, high, label in AGE_BANDS:
+        data.loc[(data["age"] >= low) & (data["age"] <= high), "age_band"] = label
+
+    orders = {"age_band": [label for _, _, label in AGE_BANDS], **SUBGROUP_ORDER}
+    table: Dict[str, List[Dict[str, Any]]] = {}
+    for column, order in orders.items():
+        rows = []
+        for group in order:
+            members = data[data[column] == group]
+            n = len(members)
+            deaths = int(members["outcome"].sum())
+            lower, upper = wilson_interval(deaths, n)
+            rows.append({
+                "group": group,
+                "patients": n,
+                "deaths": deaths,
+                "mean_predicted": round(float(members["pred"].mean()), 4) if n else None,
+                "observed": round(deaths / n, 4) if n else None,
+                "observed_ci_lower": round(lower, 4),
+                "observed_ci_upper": round(upper, 4),
+            })
+        table[column] = rows
+    return table
+
+
+def plot_subgroup_calibration(
+    table: Dict[str, List[Dict[str, Any]]],
+    output_path: str | Path
+) -> None:
+    """Plot mean predicted risk against the observed death rate for each subgroup."""
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.6), gridspec_kw={"width_ratios": [4, 2.5, 5]})
+    for ax, (column, rows) in zip(axes, table.items()):
+        x = np.arange(len(rows))
+        observed = np.array([r["observed"] for r in rows], dtype=float)
+        lower = np.array([r["observed_ci_lower"] for r in rows], dtype=float)
+        upper = np.array([r["observed_ci_upper"] for r in rows], dtype=float)
+        ax.errorbar(x, observed, yerr=[observed - lower, upper - observed], fmt="o",
+                    color="#2b5c8f", capsize=3, label="Observed (95% CI)")
+        ax.scatter(x, [r["mean_predicted"] for r in rows], marker="D", color="#d1495b",
+                   zorder=3, label="Mean predicted")
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"{r['group']}\n(n={r['patients']})" for r in rows])
+        ax.set_title(SUBGROUP_TITLES[column])
+        ax.set_ylim(0, None)
+        ax.grid(True, linestyle=":", alpha=0.6)
+    axes[0].set_ylabel("Risk of death by day 14")
+    axes[0].legend(loc="upper left", fontsize=8)
+    plt.tight_layout()
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out, dpi=150)
+    plt.close(fig)
+
+
+def save_subgroup_calibration_report(
+    features: pd.DataFrame,
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    reports_dir: str | Path
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Write the subgroup calibration figure and its numbers to the reports directory."""
+    reports_path = Path(reports_dir)
+    reports_path.mkdir(parents=True, exist_ok=True)
+    table = subgroup_calibration(features, y_true, y_prob)
+    plot_subgroup_calibration(table, reports_path / "subgroup_calibration.png")
+    with open(reports_path / "subgroup_calibration.json", "w") as f:
+        json.dump(table, f, indent=2)
+    return table
 
 
 def plot_calibration(

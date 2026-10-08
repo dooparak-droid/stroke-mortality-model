@@ -64,7 +64,7 @@ stroke-mortality-model/
 ├── Dockerfile                  # Container definition for reproducible deployment
 ├── monitoring/                 # Reference distributions and drift detection
 ├── models/                     # Serialised model pipelines and metadata
-├── reports/                    # Calibration curves, ROC plots, and evaluation tables
+├── reports/                    # Calibration curve, calibration by subgroup, and evaluation tables
 ├── scripts/build_dataset.py    # Builds the training file from the IST database
 ├── src/stroke_model/
 │   ├── __init__.py
@@ -244,6 +244,28 @@ A model that gave every patient the same risk of 5.1% would have a Brier score o
 At the threshold of 0.0544, 28.1% of holdout patients are flagged high risk, and 12.2% of flagged patients died. The flag is therefore a screening flag.
 
 The calibration curve is stored at `reports/calibration_plot.png`. It sorts the holdout patients into ten equal groups of about 327 by predicted risk and compares the mean predicted risk in each group with the proportion who died. In the highest-risk group the two agree closely (predicted 0.197, observed 0.187, 61 deaths). In the ninth group the model underestimates risk (predicted 0.090, observed 0.116, 38 deaths), and in the third-lowest group it overestimates (predicted 0.019, observed 0.006, 2 deaths). In the other seven groups the predicted and observed values are within 0.01 of each other. Differences of this size could partly be chance, because most groups contain few deaths. No recalibration was applied.
+
+### Calibration by subgroup
+
+The report in `reports/subgroup_calibration.png`, with its numbers in `reports/subgroup_calibration.json`, repeats the calibration check within groups of patients defined by age band, sex and stroke subtype. Within each group it compares the mean predicted risk with the observed death rate, and it gives a Wilson 95% confidence interval for the observed rate. The check uses the holdout partition only, and the model was not adjusted using it. The training script regenerates the report each time the model is retrained.
+
+| Subgroup | Group | Patients | Deaths | Mean predicted risk | Observed death rate (95% CI) |
+|---|---|---|---|---|---|
+| Age band | <60 | 542 | 14 | 2.1% | 2.6% (1.5% to 4.3%) |
+| Age band | 60-69 | 826 | 27 | 3.4% | 3.3% (2.3% to 4.7%) |
+| Age band | 70-79 | 1,107 | 62 | 5.7% | 5.6% (4.4% to 7.1%) |
+| Age band | 80+ | 791 | 64 | 8.6% | 8.1% (6.4% to 10.2%) |
+| Sex | Female | 1,466 | 76 | 5.9% | 5.2% (4.2% to 6.4%) |
+| Sex | Male | 1,800 | 91 | 4.7% | 5.1% (4.1% to 6.2%) |
+| Stroke subtype | LACS | 1,074 | 21 | 2.7% | 2.0% (1.3% to 3.0%) |
+| Stroke subtype | PACS | 1,397 | 75 | 5.3% | 5.4% (4.3% to 6.7%) |
+| Stroke subtype | POCS | 428 | 20 | 4.4% | 4.7% (3.0% to 7.1%) |
+| Stroke subtype | TACS | 355 | 51 | 13.6% | 14.4% (11.1% to 18.4%) |
+| Stroke subtype | OTH | 12 | 0 | 1.5% | 0.0% (0.0% to 24.2%) |
+
+![Calibration by subgroup: mean predicted risk and observed death rate by age band, sex and stroke subtype](reports/subgroup_calibration.png)
+
+In every group the mean predicted risk lies inside the interval for the observed rate. The model reproduces the rise in risk with age (predicted 2.1% for patients under 60 and 8.6% for those aged 80 and over, observed 2.6% and 8.1%) and the high risk of total anterior circulation strokes (TACS: predicted 13.6%, observed 14.4%). The largest differences are by sex, where the model predicts 5.9% for women against an observed 5.2% and 4.7% for men against an observed 5.1%, and for lacunar strokes (LACS: predicted 2.7%, observed 2.0%). These differences are small relative to the width of the intervals. The "other" subtype has 12 patients and no deaths, so its interval (0.0% to 24.2%) says nothing about calibration. Several groups hold few deaths (14 under age 60, 21 for LACS), so the check cannot detect a moderate miscalibration in them, and with 11 groups about one interval would be expected to miss the predicted value by chance alone.
 
 ### Relation to the earlier R analysis
 

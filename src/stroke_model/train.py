@@ -18,7 +18,8 @@ from stroke_model.evaluate import (
     bootstrap_metric_intervals,
     compute_youden_threshold,
     evaluate_predictions,
-    plot_calibration
+    plot_calibration,
+    save_subgroup_calibration_report
 )
 
 
@@ -131,6 +132,9 @@ def train_ridge_model(
     cal_plot_path = reports_path / "calibration_plot.png"
     plot_calibration(y_test, test_probs, cal_plot_path)
     print(f"  Calibration plot saved to: {cal_plot_path}")
+
+    save_subgroup_calibration_report(X_test, y_test, test_probs, reports_path)
+    print(f"  Subgroup calibration report saved to: {reports_path}")
 
     # Export reference statistics for drift monitoring
     print("Step 8: Exporting training reference distributions for monitoring...")
