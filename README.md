@@ -2,7 +2,7 @@
 
 > **Research demonstration only. Not for clinical use or medical decision-making.**
 
-This project ports, packages, and serves a machine learning model predicting 14-day mortality following acute stroke. It builds upon earlier exploratory analysis conducted in R (available at [Evaluating-survival-probability-after-a-stroke](https://github.com/dooparak-droid/Evaluating-survival-probability-after-a-stroke)), re-implementing the complete lifecycle in Python with an emphasis on rigorous validation, model calibration, automated testing, containerised deployment, and drift monitoring.
+This project ports, packages, and serves a machine learning model predicting 14-day mortality following acute stroke. The model is trained on a subset of the International Stroke Trial database, described under Data below. It builds upon earlier exploratory analysis conducted in R (available at [Evaluating-survival-probability-after-a-stroke](https://github.com/dooparak-droid/Evaluating-survival-probability-after-a-stroke)), re-implementing the complete lifecycle in Python with an emphasis on rigorous validation, model calibration, automated testing, containerised deployment, and drift monitoring.
 
 ---
 
@@ -22,6 +22,25 @@ A primary methodological challenge in this cohort is the severe **class imbalanc
 * A model can achieve an AUC of 0.80 while still predicting risks that are systematically too high or too low.
 * For rare adverse events, **calibration** (assessed via calibration curves and Brier score) is vital to ensure that a predicted probability of 10% genuinely corresponds to roughly 10 observed deaths per 100 similar patients.
 * The classification threshold must be chosen deliberately. Here, **Youden's J statistic** is optimised strictly on cross-validation folds to balance sensitivity and specificity without data leakage into the test set. Because the event rate is low, the resulting threshold on predicted risk is also low (about 0.049), and the high-risk flag is a screening flag and not a confident prediction of death.
+
+---
+
+## Data
+
+The training data are a subset of the **International Stroke Trial (IST)** database. The IST was a randomised trial of aspirin and heparin started within 48 hours of acute ischaemic stroke, run between 1991 and 1996. It randomised 19,435 patients from 467 hospitals in 36 countries, and its anonymised patient-level data were released for public reuse by the University of Edinburgh.
+
+* **Source:** Sandercock P, Niewada M, Czlonkowska A. (2011). International Stroke Trial database (version 2), [dataset]. University of Edinburgh, Department of Clinical Neurosciences. [https://doi.org/10.7488/ds/104](https://doi.org/10.7488/ds/104)
+* **Paper:** Sandercock PAG, Niewada M, Czlonkowska A. The International Stroke Trial database. *Trials* 2011, 12:101. [doi:10.1186/1745-6215-12-101](https://doi.org/10.1186/1745-6215-12-101)
+* **Licence:** Open Data Commons Attribution License (ODC-By) v1.0, as shown on the DataShare record.
+* **Not committed:** the data file is not stored in this repository, and the container does not include it. It must be obtained from the source above.
+
+The 13,063 patients used here are those from the IST database who were alert or drowsy at randomisation (patients recorded as unconscious are excluded), had a recorded value for each of the 22 predictors (including each of the eight neurological deficit variables, so patients with a deficit marked "cannot assess" are excluded), and had a known death status on the discharge form. Selecting patients this way from the IST file `IST_corrected.csv` reproduces the training file exactly, with the same 13,063 rows and 612 deaths.
+
+**Outcome.** The outcome is death within 14 days of randomisation that was recorded on the discharge form (IST variables `DDEAD` = Y and `ID14` = 1). There are 612 such deaths (4.7%). In the same 13,063 patients, the IST 14-day death indicator `ID14` flags 55 further deaths that were not recorded as deaths on the discharge form. These patients are coded as survivors here, so the outcome is slightly narrower than death within 14 days from all sources.
+
+IST variables map to the columns of `stroke_dataset.csv` as follows: `RDELAY` to `delay`, `RCONSC` to `consc`, `SEX` to `gender`, `AGE` to `age`, `RSLEEP` to `wakesym`, `RATRIAL` to `atrial`, `RCT` to `CT`, `RVISINF` to `Infarc`, `RHEP24` to `hep24`, `RASP3` to `asp3`, `RSBP` to `sbp`, `RDEF1` to `RDEF8` to `symptom1` to `symptom8`, `STYPE` to `subtype`, `RXHEP` to `treat1`, `RXASP` to `treat2`, and the outcome described below to `death`.
+
+The predictors include the treatment allocated in the trial (heparin dose and aspirin), as well as age, systolic blood pressure, delay from stroke onset to randomisation, stroke subtype and the neurological deficits recorded at randomisation.
 
 ---
 
@@ -67,7 +86,7 @@ pip install -e ".[dev]"
 
 ### 2. Training the Model
 
-Place `stroke_dataset.csv` in the root workspace (this file is excluded from version control via `.gitignore`). Run the training script:
+Obtain the data from the International Stroke Trial source described under Data, prepare `stroke_dataset.csv` as described there and place it in the root workspace. The file is not committed to this repository and is excluded from version control via `.gitignore`. Run the training script:
 
 ```bash
 python -m stroke_model.train
@@ -217,6 +236,7 @@ The calibration curve is stored at `reports/calibration_plot.png`. It sorts the 
 
 ## Limitations and Governance
 
-1. **Synthetic / Benchmark Data:** The dataset is derived or anonymised without individual patient identifiers. It does not represent validated clinical records from any specific healthcare provider.
-2. **No External Validation:** The model has only undergone internal cross-validation and split-sample holdout testing. Generalisability across different clinical settings remains unverified.
-3. **Research Demonstration:** This repository is an educational software engineering and machine learning lifecycle demonstration. It must not be deployed in real clinical care or used to influence medical decisions.
+1. **Source data:** The data are an anonymised, publicly released subset of the International Stroke Trial database (see Data), restricted to patients who were not unconscious at randomisation, had complete data on the 22 predictors and had a known death status at discharge. The outcome is death within 14 days recorded on the discharge form, which omits 55 deaths within 14 days that were not recorded at discharge. The data file is not included in this repository.
+2. **Trial population and era:** Patients were recruited between 1991 and 1996 into a randomised trial run across many countries. Unconscious patients are excluded, and the treatment allocated in the trial (heparin and aspirin) is one of the predictors. The model therefore reflects that trial population and not current stroke care.
+3. **No External Validation:** The model has only undergone internal cross-validation and split-sample holdout testing. Generalisability across different clinical settings remains unverified.
+4. **Research Demonstration:** This repository is an educational software engineering and machine learning lifecycle demonstration. It must not be deployed in real clinical care or used to influence medical decisions.
