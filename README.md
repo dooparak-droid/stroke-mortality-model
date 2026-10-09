@@ -8,7 +8,7 @@ This project trains, packages, and serves a machine learning model predicting 14
 
 ## Live Demo
 
-The service is deployed on Render's free tier at [stroke-mortality-model.onrender.com](https://stroke-mortality-model.onrender.com). Opening the link redirects to the interactive API documentation at `/docs`, where the `POST /predict` endpoint can be tried directly in the browser.
+The service is deployed on Render's free tier at [stroke-mortality-model.onrender.com](https://stroke-mortality-model.onrender.com). Opening the link redirects to the interactive API documentation at `/docs`, where the `POST /predict` endpoint can be tried directly in the browser. A friendlier browser form for the model is available as a [Streamlit page](https://stroke-mortality-model-niq4dkjtfzzkznc8zunvpo.streamlit.app/), described under Streamlit App.
 
 Two limitations of the free tier apply. The service sleeps after 15 minutes without traffic, so the first request after a quiet period can take about a minute. The service does not log requests. The drift check is run separately on a CSV of input records (see Drift Monitoring below). A browser form for the model is described under Streamlit App.
 
@@ -155,7 +155,7 @@ There are two versions of the app. They show the same form and use the same save
 
 `app/streamlit_app.py` loads the saved model and applies the same input checks as the API. Nothing else needs to be running, and this is the version intended for public use.
 
-* **Page:** *link to be added after deployment*
+* **Page:** [https://stroke-mortality-model-niq4dkjtfzzkznc8zunvpo.streamlit.app/](https://stroke-mortality-model-niq4dkjtfzzkznc8zunvpo.streamlit.app/)
 * **Run locally:** `pip install -e ".[app]"`, then `streamlit run app/streamlit_app.py`, then open `http://localhost:8501`.
 * **Deployment:** Streamlit Community Cloud builds and runs the app directly from this repository. The main file is `app/streamlit_app.py`, the libraries come from `app/requirements.txt` (pinned to the versions the saved model was built with), and the Python version is set to 3.13. No Dockerfile or API is involved, and pushing to GitHub updates the page.
 
@@ -163,7 +163,7 @@ There are two versions of the app. They show the same form and use the same save
 
 `app/streamlit_app_api.py` runs the same app in API mode. The page contains no model. It sends the form to the stroke prediction API deployed on Render (see Live Demo), which loads the model and returns the estimate. This version was built as a proof of concept, to show a front end and a model service deployed separately. It is not the recommended version for public use. The model is small enough to run inside the app, and this version needs two hosted services awake, each of which sleeps when idle on free hosting, so the first load after a quiet period can take about a minute.
 
-* **Page:** *link to be added after deployment*
+* **Page:** [https://stroke-mortality-model-jv5zayihytj2jtngcijyu7.streamlit.app/](https://stroke-mortality-model-jv5zayihytj2jtngcijyu7.streamlit.app/)
 * **Run locally:** `streamlit run app/streamlit_app_api.py` calls the deployed API. To call an API running on your own computer, start it with `uvicorn stroke_model.api:app --port 8000` and run `STROKE_API_URL=http://localhost:8000 streamlit run app/streamlit_app.py`. If port 8000 or 8501 is already in use, choose others with uvicorn's `--port` and Streamlit's `--server.port`.
 * **Deployment:** a second app on Streamlit Community Cloud from the same repository, with the main file `app/streamlit_app_api.py`.
 
