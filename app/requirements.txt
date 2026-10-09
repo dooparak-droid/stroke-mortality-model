@@ -1,0 +1,10 @@
+# Libraries for the Streamlit app when it is built from GitHub (for example on Streamlit
+# Community Cloud). The pins match the versions the saved model was built with.
+streamlit>=1.40.0
+requests>=2.31.0
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+joblib==1.6.0
+fastapi==0.142.2
+pydantic==2.13.5

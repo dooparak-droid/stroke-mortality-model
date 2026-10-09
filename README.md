@@ -10,7 +10,7 @@ This project trains, packages, and serves a machine learning model predicting 14
 
 The service is deployed on Render's free tier at [stroke-mortality-model.onrender.com](https://stroke-mortality-model.onrender.com). Opening the link redirects to the interactive API documentation at `/docs`, where the `POST /predict` endpoint can be tried directly in the browser.
 
-Two limitations of the free tier apply. The service sleeps after 15 minutes without traffic, so the first request after a quiet period can take about a minute. The service does not log requests. The drift check is run separately on a CSV of input records (see Drift Monitoring below).
+Two limitations of the free tier apply. The service sleeps after 15 minutes without traffic, so the first request after a quiet period can take about a minute. The service does not log requests. The drift check is run separately on a CSV of input records (see Drift Monitoring below). A browser form for the model is described under Streamlit App.
 
 ---
 
@@ -62,7 +62,7 @@ The predictors include the treatment allocated in the trial (heparin dose and as
 stroke-mortality-model/
 ├── .github/workflows/ci.yml    # Continuous integration with automated testing
 ├── Dockerfile                  # Container definition for reproducible deployment
-├── app/streamlit_app.py        # Browser front end that calls the API
+├── app/                        # Streamlit app: streamlit_app.py (default), streamlit_app_api.py (proof of concept)
 ├── monitoring/                 # Reference distributions and drift detection
 ├── models/                     # Serialised model pipelines and metadata
 ├── reports/                    # Calibration curve, calibration by subgroup, and evaluation tables
@@ -147,23 +147,27 @@ curl http://localhost:7860/health
 
 ## Streamlit App
 
-`app/streamlit_app.py` is a browser form for the API. It collects the 22 predictors, sends them to `POST /predict`, and shows the estimated risk of death by day 14, the screening flag and the flag threshold. The form labels follow the IST variable definitions, and the app warns when an age, blood pressure or delay lies outside the range of the training data (age 16 to 98, systolic blood pressure 70 to 295 mmHg, delay 1 to 48 hours). The sidebar shows the model version and the API version, and the result can be downloaded as JSON.
+The Streamlit app is a browser form for the model. It collects the 22 predictors and shows the estimated risk of death by day 14, the screening flag and the flag threshold. The form labels follow the IST variable definitions, and the app warns when an age, blood pressure or delay lies outside the range of the training data (age 16 to 98, systolic blood pressure 70 to 295 mmHg, delay 1 to 48 hours). The sidebar shows the model version and the software version, and the result can be downloaded as JSON.
 
-The app contains no model. It calls the service, so the service must be running first:
+There are two versions of the app. They show the same form and use the same saved model.
 
-```bash
-pip install -e ".[app]"
-uvicorn stroke_model.api:app --port 8000
-streamlit run app/streamlit_app.py
-```
+### Default version: the model runs inside the app
 
-Open `http://localhost:8501`. The app looks for the service at `http://localhost:8000`. To use another address, such as the deployed service, or another port when 8000 or 8501 is already in use, set `STROKE_API_URL` and pass `--server.port` to Streamlit:
+`app/streamlit_app.py` loads the saved model and applies the same input checks as the API. Nothing else needs to be running, and this is the version intended for public use.
 
-```bash
-STROKE_API_URL=https://stroke-mortality-model.onrender.com streamlit run app/streamlit_app.py
-```
+* **Page:** *link to be added after deployment*
+* **Run locally:** `pip install -e ".[app]"`, then `streamlit run app/streamlit_app.py`, then open `http://localhost:8501`.
+* **Deployment:** Streamlit Community Cloud builds and runs the app directly from this repository. The main file is `app/streamlit_app.py`, the libraries come from `app/requirements.txt` (pinned to the versions the saved model was built with), and the Python version is set to 3.13. No Dockerfile or API is involved, and pushing to GitHub updates the page.
 
-The deployed service sleeps when idle, so the first request after a quiet period can take about a minute, and the app waits up to 90 seconds before reporting a failure. The app has not been deployed. The Docker image contains the API only and does not include the app. The comparison figures under the result (the training event rate and how the flag performed on held-out patients) are shown only when the service reports model version v2.0.0, so they cannot go stale after a retrain.
+### Addendum: proof of concept with the API on Render
+
+`app/streamlit_app_api.py` runs the same app in API mode. The page contains no model. It sends the form to the stroke prediction API deployed on Render (see Live Demo), which loads the model and returns the estimate. This version was built as a proof of concept, to show a front end and a model service deployed separately. It is not the recommended version for public use. The model is small enough to run inside the app, and this version needs two hosted services awake, each of which sleeps when idle on free hosting, so the first load after a quiet period can take about a minute.
+
+* **Page:** *link to be added after deployment*
+* **Run locally:** `streamlit run app/streamlit_app_api.py` calls the deployed API. To call an API running on your own computer, start it with `uvicorn stroke_model.api:app --port 8000` and run `STROKE_API_URL=http://localhost:8000 streamlit run app/streamlit_app.py`. If port 8000 or 8501 is already in use, choose others with uvicorn's `--port` and Streamlit's `--server.port`.
+* **Deployment:** a second app on Streamlit Community Cloud from the same repository, with the main file `app/streamlit_app_api.py`.
+
+Both versions read the saved model in this repository, so for the same input they return the same estimate once they are deployed from the same commit. The Docker image contains the API only and does not include either app.
 
 ---
 
