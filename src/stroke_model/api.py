@@ -54,74 +54,74 @@ class PatientRecord(BaseModel):
         ...,
         ge=0,
         le=120,
-        description="Patient age in years (0 to 120)",
+        description="Age in years (0 to 120). The training data covers ages 16 to 98",
         examples=[72.0]
     )
     sbp: float = Field(
         ...,
         ge=50,
         le=300,
-        description="Systolic blood pressure in mmHg (50 to 300)",
+        description="Systolic blood pressure at randomisation in mmHg (50 to 300). The training data covers 70 to 295",
         examples=[150.0]
     )
     delay: float = Field(
         ...,
         ge=0,
         le=100,
-        description="Time from symptom onset to hospital presentation in hours (0 to 100)",
+        description="Delay between stroke onset and randomisation in hours (0 to 100). The training data covers 1 to 48",
         examples=[14.0]
     )
 
     # Demographic & Clinical categoricals
     gender: Literal["M", "F"] = Field(
         ...,
-        description="Biological sex ('M' = Male, 'F' = Female)",
+        description="Sex ('M' = male, 'F' = female)",
         examples=["F"]
     )
     consc: Literal["D", "F"] = Field(
         ...,
-        description="Consciousness level ('D' = Drowsy, 'F' = Fully alert)",
+        description="Conscious state at randomisation ('F' = fully alert, 'D' = drowsy). Patients recorded as unconscious are not in the training data",
         examples=["F"]
     )
     subtype: Literal["LACS", "OTH", "PACS", "POCS", "TACS"] = Field(
         ...,
-        description="Oxford Community Stroke Project clinical classification ('LACS', 'OTH', 'PACS', 'POCS', 'TACS')",
+        description="Stroke subtype (Oxford Community Stroke Project classification): 'LACS' lacunar, 'PACS' partial anterior circulation, 'POCS' posterior circulation, 'TACS' total anterior circulation, 'OTH' other",
         examples=["PACS"]
     )
     treat1: Literal["L", "M", "N"] = Field(
         ...,
-        description="Treatment code 1 ('L', 'M', 'N')",
+        description="Heparin allocated in the trial ('N' = none, 'L' = low dose, 'M' = medium dose)",
         examples=["N"]
     )
     treat2: Literal["N", "Y"] = Field(
         ...,
-        description="Treatment code 2 ('N', 'Y')",
+        description="Aspirin allocated in the trial ('Y' = aspirin, 'N' = no aspirin)",
         examples=["N"]
     )
 
     # Clinical flags ('Y' / 'N')
-    wakesym: Literal["Y", "N"] = Field(..., description="Symptoms present upon waking ('Y'/'N')", examples=["N"])
-    atrial: Literal["Y", "N"] = Field(..., description="History of atrial fibrillation ('Y'/'N')", examples=["N"])
-    CT: Literal["Y", "N"] = Field(..., description="CT scan performed prior to admission ('Y'/'N')", examples=["Y"])
-    Infarc: Literal["Y", "N"] = Field(..., description="Cerebral infarction confirmed ('Y'/'N')", examples=["Y"])
-    hep24: Literal["Y", "N"] = Field(..., description="Heparin administered within 24 hours ('Y'/'N')", examples=["N"])
-    asp3: Literal["Y", "N"] = Field(..., description="Aspirin administered within 3 days ('Y'/'N')", examples=["N"])
+    wakesym: Literal["Y", "N"] = Field(..., description="Symptoms noted on waking ('Y'/'N')", examples=["N"])
+    atrial: Literal["Y", "N"] = Field(..., description="Atrial fibrillation ('Y'/'N')", examples=["N"])
+    CT: Literal["Y", "N"] = Field(..., description="CT scan before randomisation ('Y'/'N')", examples=["Y"])
+    Infarc: Literal["Y", "N"] = Field(..., description="Infarct visible on CT ('Y'/'N')", examples=["Y"])
+    hep24: Literal["Y", "N"] = Field(..., description="Heparin in the 24 hours before randomisation ('Y'/'N')", examples=["N"])
+    asp3: Literal["Y", "N"] = Field(..., description="Aspirin in the 3 days before randomisation ('Y'/'N')", examples=["N"])
 
-    # Neurological deficit symptoms ('Y' / 'N')
-    symptom1: Literal["Y", "N"] = Field(..., description="Symptom 1 deficit flag", examples=["Y"])
-    symptom2: Literal["Y", "N"] = Field(..., description="Symptom 2 deficit flag", examples=["Y"])
-    symptom3: Literal["Y", "N"] = Field(..., description="Symptom 3 deficit flag", examples=["N"])
-    symptom4: Literal["Y", "N"] = Field(..., description="Symptom 4 deficit flag", examples=["N"])
-    symptom5: Literal["Y", "N"] = Field(..., description="Symptom 5 deficit flag", examples=["N"])
-    symptom6: Literal["Y", "N"] = Field(..., description="Symptom 6 deficit flag", examples=["N"])
-    symptom7: Literal["Y", "N"] = Field(..., description="Symptom 7 deficit flag", examples=["N"])
-    symptom8: Literal["Y", "N"] = Field(..., description="Symptom 8 deficit flag", examples=["N"])
+    # Neurological deficits at randomisation ('Y' / 'N'); symptom1 to symptom8 are IST variables RDEF1 to RDEF8
+    symptom1: Literal["Y", "N"] = Field(..., description="Face deficit at randomisation ('Y'/'N')", examples=["Y"])
+    symptom2: Literal["Y", "N"] = Field(..., description="Arm or hand deficit at randomisation ('Y'/'N')", examples=["Y"])
+    symptom3: Literal["Y", "N"] = Field(..., description="Leg or foot deficit at randomisation ('Y'/'N')", examples=["N"])
+    symptom4: Literal["Y", "N"] = Field(..., description="Dysphasia at randomisation ('Y'/'N')", examples=["N"])
+    symptom5: Literal["Y", "N"] = Field(..., description="Hemianopia at randomisation ('Y'/'N')", examples=["N"])
+    symptom6: Literal["Y", "N"] = Field(..., description="Visuospatial disorder at randomisation ('Y'/'N')", examples=["N"])
+    symptom7: Literal["Y", "N"] = Field(..., description="Brainstem or cerebellar signs at randomisation ('Y'/'N')", examples=["N"])
+    symptom8: Literal["Y", "N"] = Field(..., description="Other deficit at randomisation ('Y'/'N')", examples=["N"])
 
 
 class PredictionResponse(BaseModel):
     """Standardised prediction output structure."""
     mortality_probability: float = Field(..., description="Estimated probability of 14-day mortality (0.0 to 1.0)")
-    high_risk_flag: bool = Field(..., description="True if estimated probability exceeds the Youden classification threshold")
+    high_risk_flag: bool = Field(..., description="True if the estimated probability is at or above the Youden classification threshold")
     threshold_applied: float = Field(..., description="Decision boundary threshold selected via Youden's J statistic")
     model_version: str = Field(..., description="Version of the serialised model pipeline")
     disclaimer: str = Field(..., description="Regulatory safety disclaimer")
