@@ -67,8 +67,8 @@ class PatientRecord(BaseModel):
     delay: float = Field(
         ...,
         ge=0,
-        le=100,
-        description="Delay between stroke onset and randomisation in hours (0 to 100). The training data covers 1 to 48",
+        le=48,
+        description="Delay between stroke onset and randomisation in hours (0 to 48). The trial randomised patients within 48 hours of onset, and the training data covers 1 to 48",
         examples=[14.0]
     )
 

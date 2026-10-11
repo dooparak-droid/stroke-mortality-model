@@ -109,7 +109,7 @@ def test_api_mode_sends_all_22_predictors_with_expected_codes():
     assert mock_post.call_args.args[0] == f"{API}/predict"
 
     values = metrics(at)
-    assert values["Estimated risk of death by day 14"] == "2.1%"
+    assert values["Estimated risk of death within 14 days of randomisation"] == "2.1%"
     assert values["Screening flag"] == "Not flagged"
     assert values["Flag threshold"] == "5.4%"
 
@@ -131,7 +131,7 @@ def test_api_mode_high_risk_result_is_labelled():
         at.button[0].click().run()
     values = metrics(at)
     assert values["Screening flag"] == "High risk"
-    assert values["Estimated risk of death by day 14"] == "13.3%"
+    assert values["Estimated risk of death within 14 days of randomisation"] == "13.3%"
 
 
 def test_api_mode_unreachable_service_shows_error_and_no_form():
@@ -194,7 +194,7 @@ def test_default_mode_runs_the_real_model_without_any_network_call():
         assert not at.exception
 
     values = metrics(at)
-    assert values["Estimated risk of death by day 14"] == "2.1%"      # the README example patient
+    assert values["Estimated risk of death within 14 days of randomisation"] == "2.1%"      # the README example patient
     assert values["Screening flag"] == "Not flagged"
     assert values["Flag threshold"] == "5.4%"
 
@@ -208,6 +208,13 @@ def test_default_mode_flags_a_high_risk_patient():
         at.button[0].click().run()
     assert not at.exception
     assert metrics(at)["Screening flag"] == "High risk"
+
+
+def test_delay_field_is_limited_to_the_48_hour_trial_window():
+    with env(), fake_service(get=never_called, post=never_called):
+        at = AppTest.from_file(APP, default_timeout=60).run()
+    delay_field = next(n for n in at.number_input if n.label == "Hours from stroke onset to randomisation")
+    assert delay_field.min == 1 and delay_field.max == 48
 
 
 def test_default_mode_warns_for_age_outside_the_training_range():

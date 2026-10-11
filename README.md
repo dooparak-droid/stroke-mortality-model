@@ -2,7 +2,7 @@
 
 > **Research demonstration only. Not for clinical use or medical decision-making.**
 
-This project trains, packages, and serves a machine learning model predicting 14-day mortality following acute stroke. The model is trained on a subset of the International Stroke Trial database, described under Data below. The Python implementation covers the complete lifecycle, with an emphasis on validation, model calibration, automated testing, containerised deployment, and drift monitoring. An earlier exploratory analysis of a related file in R is available at [Evaluating-survival-probability-after-a-stroke](https://github.com/dooparak-droid/Evaluating-survival-probability-after-a-stroke). It used a narrower outcome definition, and its relation to this project is described under Results.
+This project trains, packages, and serves a machine learning model predicting death within 14 days of randomisation after acute stroke. Patients were randomised within 48 hours of the stroke, so the 14-day window starts up to two days after onset. The model is trained on a subset of the International Stroke Trial database, described under Data below. The Python implementation covers the complete lifecycle, with an emphasis on validation, model calibration, automated testing, containerised deployment, and drift monitoring. An earlier exploratory analysis of a related file in R is available at [Evaluating-survival-probability-after-a-stroke](https://github.com/dooparak-droid/Evaluating-survival-probability-after-a-stroke). It used a narrower outcome definition, and its relation to this project is described under Results.
 
 ---
 
@@ -41,6 +41,8 @@ The training data are a subset of the **International Stroke Trial (IST)** datab
 
 The third rule is not needed to define the outcome below. It is kept so that the patient set is identical to the one used in the earlier R analysis. All 13,063 selected patients have a known 14-day status.
 
+**Time window.** IST enrolled patients with stroke onset "within the previous 48 hours". The delay from onset to randomisation in the 13,063 patients runs from 1 to 48 hours, and nobody was enrolled later. The 14-day outcome window starts at randomisation, not at onset, and the data contain only patients who were alive at randomisation. No patient with a delay beyond 48 hours is represented, and the model must not be applied to one.
+
 **Outcome.** The outcome `death` is 1 when the IST 14-day death indicator `ID14` is 1, and 0 otherwise. `ID14` marks death within 14 days of randomisation as determined by the trial, including deaths that the discharge form does not record. There are 667 such deaths among the 13,063 patients (5.1%). The derivation matters because IST records death in two places that do not always agree:
 * 612 patients died within 14 days and the death is also recorded on the discharge form (`DDEAD` = Y).
 * 55 patients died within 14 days but the discharge form does not record a death (`DDEAD` = N). For 41 of the 55 the form says the patient was alive when they left hospital. They are counted as deaths here. An outcome restricted to deaths recorded on the discharge form would have 612 deaths (4.7%).
@@ -67,6 +69,7 @@ stroke-mortality-model/
 ├── models/                     # Serialised model pipelines and metadata
 ├── reports/                    # Calibration curve, calibration by subgroup, and evaluation tables
 ├── scripts/build_dataset.py    # Builds the training file from the IST database
+├── analysis/                   # Read-only scripts: delay, benchmark and smaller-model checks
 ├── src/stroke_model/
 │   ├── __init__.py
 │   ├── api.py                  # FastAPI service with validated schemas
@@ -147,7 +150,7 @@ curl http://localhost:7860/health
 
 ## Streamlit App
 
-The Streamlit app is a browser form for the model. It collects the 22 predictors and shows the estimated risk of death by day 14, the screening flag and the flag threshold. The form labels follow the IST variable definitions, and the app warns when an age, blood pressure or delay lies outside the range of the training data (age 16 to 98, systolic blood pressure 70 to 295 mmHg, delay 1 to 48 hours). The sidebar shows the model version and the software version, and the result can be downloaded as JSON.
+The Streamlit app is a browser form for the model. It collects the 22 predictors and shows the estimated risk of death within 14 days of randomisation, the screening flag and the flag threshold. The form labels follow the IST variable definitions. The delay field is limited to 1 to 48 hours, the trial's enrolment window, and the app warns when an age or blood pressure lies outside the range of the training data (age 16 to 98, systolic blood pressure 70 to 295 mmHg). The sidebar shows the model version and the software version, and the result can be downloaded as JSON.
 
 There are two versions of the app. They show the same form and use the same saved model.
 
@@ -288,11 +291,40 @@ The report in `reports/subgroup_calibration.png`, with its numbers in `reports/s
 | Stroke subtype | PACS | 1,397 | 75 | 5.3% | 5.4% (4.3% to 6.7%) |
 | Stroke subtype | POCS | 428 | 20 | 4.4% | 4.7% (3.0% to 7.1%) |
 | Stroke subtype | TACS | 355 | 51 | 13.6% | 14.4% (11.1% to 18.4%) |
-| Stroke subtype | OTH | 12 | 0 | 1.5% | 0.0% (0.0% to 24.2%) |
+| Stroke subtype | OTH | 12 | 0 | 1.5% | 0.0% (0.0% to 24.3%) |
 
 ![Calibration by subgroup: mean predicted risk and observed death rate by age band, sex and stroke subtype](reports/subgroup_calibration.png)
 
-In every group the mean predicted risk lies inside the interval for the observed rate. The model reproduces the rise in risk with age (predicted 2.1% for patients under 60 and 8.6% for those aged 80 and over, observed 2.6% and 8.1%) and the high risk of total anterior circulation strokes (TACS: predicted 13.6%, observed 14.4%). The largest differences are by sex, where the model predicts 5.9% for women against an observed 5.2% and 4.7% for men against an observed 5.1%, and for lacunar strokes (LACS: predicted 2.7%, observed 2.0%). These differences are small relative to the width of the intervals. The "other" subtype has 12 patients and no deaths, so its interval (0.0% to 24.2%) says nothing about calibration. Several groups hold few deaths (14 under age 60, 21 for LACS), so the check cannot detect a moderate miscalibration in them, and with 11 groups about one interval would be expected to miss the predicted value by chance alone.
+In every group the mean predicted risk lies inside the interval for the observed rate. The model reproduces the rise in risk with age (predicted 2.1% for patients under 60 and 8.6% for those aged 80 and over, observed 2.6% and 8.1%) and the high risk of total anterior circulation strokes (TACS: predicted 13.6%, observed 14.4%). The largest differences are by sex, where the model predicts 5.9% for women against an observed 5.2% and 4.7% for men against an observed 5.1%, and for lacunar strokes (LACS: predicted 2.7%, observed 2.0%). These differences are small relative to the width of the intervals. The "other" subtype has 12 patients and no deaths, so its interval (0.0% to 24.3%) says nothing about calibration. Several groups hold few deaths (14 under age 60, 21 for LACS), so the check cannot detect a moderate miscalibration in them, and with 11 groups about one interval would be expected to miss the predicted value by chance alone.
+
+### The delay field
+
+The estimated risk falls as the delay from onset to randomisation rises. For the reference patient it is 2.7% at 1 hour and 1.2% at 48 hours. The pattern is in the data and does not depend on the model:
+
+| Delay | Patients | Deaths | Death rate (95% interval) |
+|---|---|---|---|
+| 1 to 6 h | 1,895 | 127 | 6.7% (5.7% to 7.9%) |
+| 7 to 12 h | 2,708 | 174 | 6.4% (5.6% to 7.4%) |
+| 13 to 24 h | 3,842 | 193 | 5.0% (4.4% to 5.8%) |
+| 25 to 36 h | 3,100 | 117 | 3.8% (3.2% to 4.5%) |
+| 37 to 48 h | 1,518 | 56 | 3.7% (2.9% to 4.8%) |
+
+Patients randomised later were also less often drowsy or had a total anterior stroke. Adjusting for them, and for all other predictors, weakens the association only modestly. Each extra 12 hours multiplies the odds of death by 0.79 with delay alone, 0.84 after drowsiness and total anterior stroke, and 0.83 after all other predictors.
+
+This is an association in trial data and is not evidence that a later presentation is safer. A patient who died before being randomised cannot appear in the data, so the 14-day count begins only for those who survived to randomisation. The days to death in IST include deaths on day 0 in every delay band, which is consistent with a clock that starts at randomisation. Entering delay as five bands, or as a smooth curve, did not improve the model (holdout AUC 0.7752 for both against 0.7755 for a straight line, with intervals that include zero), so the deployed model uses delay as a number. The scripts are in `analysis/`.
+
+### Comparison with IST's own risk score and with smaller models
+
+IST's data include a derived column, `EXPD14`, described only as the "predicted probability of death at 14 days". Its method is not documented. It can be reproduced almost exactly (99.98% of the variation in its log-odds) from five baseline measures: conscious state, atrial fibrillation, sex, age and the number of neurological deficits, so it is a baseline score. It was very likely built using patients that include this holdout, whereas the model never saw them.
+
+| Model | Predictors | Holdout AUC | Brier score |
+|---|---|---|---|
+| This model (deployed) | 22 | 0.7754 | 0.0457 |
+| IST `EXPD14` | 5 measures | 0.7636 | 0.0454 |
+| Ridge model, five measures | 5 | 0.7657 | 0.0455 |
+| Ridge model, five measures and delay | 6 | 0.7718 | 0.0459 |
+
+The AUC of this model exceeds IST's score by 0.012, with a 95% bootstrap interval of -0.003 to +0.026. The data therefore do not show that it ranks patients better than a simple score of five baseline measures. The same holds for the smaller ridge models fitted here, whose holdout AUCs are 0.010 and 0.004 lower than a refit of the full model (intervals -0.023 to +0.003 and -0.012 to +0.005). All of these come from one split with 167 deaths in the holdout, so only large differences could be detected. Delay is the most useful single addition to the five measures by cross-validated AUC (0.7732 against 0.7707), though the gain is small. The scripts are in `analysis/`.
 
 ### Relation to the earlier R analysis
 
@@ -305,4 +337,5 @@ An earlier exploratory analysis in R used a narrower outcome (death within 14 da
 1. **Source data:** The data are an anonymised, publicly released subset of the International Stroke Trial database (see Data), restricted to patients who were not unconscious at randomisation, had complete data on the 22 predictors and had a known death status on the discharge form. The outcome is death within 14 days from IST's indicator `ID14`, which includes 55 deaths that were not recorded on the discharge form. The data file is not included in this repository.
 2. **Trial population and era:** Patients were recruited between 1991 and 1996 into a randomised trial run across many countries. Unconscious patients are excluded, and the treatment allocated in the trial (heparin and aspirin) is one of the predictors. The model therefore reflects that trial population and not current stroke care.
 3. **No External Validation:** The model has only undergone internal cross-validation and split-sample holdout testing. Generalisability across different clinical settings remains unverified.
-4. **Research Demonstration:** This repository is an educational software engineering and machine learning lifecycle demonstration. It must not be deployed in real clinical care or used to influence medical decisions.
+4. **Delay window and association:** Every patient was randomised within 48 hours of onset, so the model has no information about later presentations and must not be used for them. The fall in risk with longer delay is an association in trial data, partly explained by who survives to randomisation. It is not evidence that waiting is protective.
+5. **Research Demonstration:** This repository is an educational software engineering and machine learning lifecycle demonstration. It must not be deployed in real clinical care or used to influence medical decisions.

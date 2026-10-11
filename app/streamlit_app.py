@@ -29,12 +29,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 REQUEST_TIMEOUT_SECONDS = 90  # a service on free hosting can take about a minute to wake
 REPOSITORY_URL = "https://github.com/dooparak-droid/stroke-mortality-model"
 
-# Ranges of the training data (International Stroke Trial subset used for model v2.0.0)
+# Ranges of the training data (International Stroke Trial subset used for model v2.0.0). Delay is
+# not listed because the form limits it to 1 to 48 hours, the trial's enrolment window.
 TRAINING_RANGES = {
     "age": (16, 98, "years"),
     "sbp": (70, 295, "mmHg"),
-    "delay": (1, 48, "hours"),
 }
+DELAY_RANGE_HOURS = (1, 48)
 
 # Reference figures that describe model v2.0.0. They are shown only when the model reports
 # that version, so they cannot go stale after the model is retrained.
@@ -179,7 +180,7 @@ with st.sidebar:
 
 st.write(
     "Enter the patient's details as recorded at randomisation in the International Stroke Trial. "
-    "The model estimates the risk of death within 14 days."
+    "The model estimates the risk of death within 14 days of randomisation, which took place up to 48 hours after the stroke."
 )
 
 with st.form("patient"):
@@ -195,7 +196,13 @@ with st.form("patient"):
     st.subheader("Presentation")
     c1, c2, c3 = st.columns(3)
     sbp = c1.number_input("Systolic blood pressure (mmHg)", min_value=50, max_value=300, value=150)
-    delay = c2.number_input("Hours from stroke onset to randomisation", min_value=0, max_value=100, value=14)
+    delay = c2.number_input(
+        "Hours from stroke onset to randomisation",
+        min_value=DELAY_RANGE_HOURS[0], max_value=DELAY_RANGE_HOURS[1], value=14,
+        help="The trial enrolled patients within 48 hours of onset, so longer delays are not in the data. "
+             "In these data, patients randomised later had a lower risk of death within 14 days. This is an "
+             "association and is not evidence that waiting is protective.",
+    )
     subtype = c3.selectbox("Stroke subtype", list(SUBTYPES), index=1, format_func=SUBTYPES.get)
     c1, c2, c3 = st.columns(3)
     wakesym = c1.checkbox("Symptoms noted on waking")
@@ -274,7 +281,7 @@ if result:
         )
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Estimated risk of death by day 14", f"{risk:.1%}")
+    m1.metric("Estimated risk of death within 14 days of randomisation", f"{risk:.1%}")
     m2.metric("Screening flag", "High risk" if output["high_risk_flag"] else "Not flagged")
     m3.metric("Flag threshold", f"{output['threshold_applied']:.1%}")
 
@@ -291,6 +298,15 @@ if result:
                 f"{HOLDOUT_SENSITIVITY:.0%} of the deaths, but only {HOLDOUT_FLAGGED_DIED:.0%} of the "
                 "patients it flagged died. A patient who is not flagged is not risk free."
             )
+
+    with st.expander("About the delay field"):
+        st.write(
+            "Delay is the time from stroke onset to randomisation. The trial enrolled patients within 48 hours "
+            "of onset, so the model has no information beyond that. The 14-day count starts at randomisation. "
+            "Patients randomised later had to survive longer to be included, and in these data they had a lower "
+            "risk of death within 14 days. The model reflects that association. It does not mean that a later "
+            "presentation is safer, and it should not be used to compare treatment timing."
+        )
 
     st.caption(output["disclaimer"])
     st.download_button(

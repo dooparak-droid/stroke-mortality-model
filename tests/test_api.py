@@ -78,10 +78,16 @@ def test_predict_rejects_implausible_blood_pressure():
 
 
 def test_predict_rejects_implausible_delay():
-    """Verify Pydantic schema rejects symptom onset delay > 100 hours."""
+    """Verify Pydantic schema rejects delay beyond the 48-hour trial window and accepts 48."""
     with TestClient(app) as client:
         too_long = dict(SYNTHETIC_PATIENT, delay=150.0)
         assert client.post("/predict", json=too_long).status_code == 422
+
+        just_over = dict(SYNTHETIC_PATIENT, delay=49.0)
+        assert client.post("/predict", json=just_over).status_code == 422
+
+        at_limit = dict(SYNTHETIC_PATIENT, delay=48.0)
+        assert client.post("/predict", json=at_limit).status_code == 200
 
 
 def test_predict_rejects_missing_field():
